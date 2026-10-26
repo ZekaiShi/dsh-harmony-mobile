@@ -22,10 +22,12 @@ import { NativeBackButton } from '../components/NativeBackButton';
 import { PageNavigation } from '../platform/PageNavigation';
 import { HoldingMotion } from '../platform/HoldingMotion';
 import { ComposerToolbar } from '../components/ComposerToolbar';
+import { PageBackdrop } from '../components/PageBackdrop';
 
 @Entry
 @Component
 struct Assistant {
+  @StorageLink('chromeTextColor') private chromeTextColor: string = '#30302E';
   @StorageLink('leftControls') @Watch('handChanged') private leftControls: boolean = false;
   @State private screen: string = 'list';
   @State private conversations: LocalConversation[] = [];
@@ -590,28 +592,32 @@ struct Assistant {
   @Builder private privacyHeader() { this.header('privacy') }
   @Builder private destination(page: string) {
     if (page === 'chat') {
-      NavDestination() { this.chat() }.title({ builder: this.chatHeader, height: 60 }, HarmonyExperience.titleOptions()).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
+      NavDestination() { this.chat() }.title({ builder: this.chatHeader, height: 60 }, HarmonyExperience.titleOptions()).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
     }
     else if (page === 'settings') {
-      NavDestination() { this.settingsPage() }.title({ builder: this.settingsHeader, height: 60 }, HarmonyExperience.titleOptions()).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
+      NavDestination() { this.settingsPage() }.title({ builder: this.settingsHeader, height: 60 }, HarmonyExperience.titleOptions()).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
     }
     else if (page === 'providers') {
-      NavDestination() { this.providersPage() }.title({ builder: this.providersHeader, height: 60 }, HarmonyExperience.titleOptions()).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
+      NavDestination() { this.providersPage() }.title({ builder: this.providersHeader, height: 60 }, HarmonyExperience.titleOptions()).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
     }
     else if (page === 'models') {
-      NavDestination() { this.modelsPage() }.title({ builder: this.modelsHeader, height: 60 }, HarmonyExperience.titleOptions()).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
+      NavDestination() { this.modelsPage() }.title({ builder: this.modelsHeader, height: 60 }, HarmonyExperience.titleOptions()).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
     }
     else if (page === 'context') {
-      NavDestination() { this.contextPage() }.title({ builder: this.contextHeader, height: 60 }, HarmonyExperience.titleOptions()).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
+      NavDestination() { this.contextPage() }.title({ builder: this.contextHeader, height: 60 }, HarmonyExperience.titleOptions()).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
     }
     else if (page === 'privacy') {
-      NavDestination() { this.privacy() }.title({ builder: this.privacyHeader, height: 60 }, HarmonyExperience.titleOptions()).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
+      NavDestination() { this.privacy() }.title({ builder: this.privacyHeader, height: 60 }, HarmonyExperience.titleOptions()).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
     }
   }
   build() {
+    Stack() {
+    PageBackdrop()
     Navigation(this.navigation.paths) { this.history() }
       .navDestination(this.destination).title({ builder: this.listHeader, height: 60 }, HarmonyExperience.titleOptions())
       .titleMode(NavigationTitleMode.Mini).hideBackButton(true).hideToolBar(true).mode(NavigationMode.Stack)
       .width('100%').height('100%').backgroundColor($r('app.color.page_bg'))
+      .systemBarStyle({ statusBarContentColor: this.chromeTextColor })
+    }.width('100%').height('100%').backgroundColor($r('app.color.page_bg'))
   }
 }

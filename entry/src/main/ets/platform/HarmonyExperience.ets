@@ -39,12 +39,9 @@ export class HarmonyExperience {
     catch (_) { return false; }
   }
   static titleOptions(): NavigationTitleOptions {
-    if (deviceInfo.apiAvailable('26.0.0')) {
-      if (HarmonyExperience.materialSupported()) {
-        return { backgroundColor: Color.Transparent, systemMaterial: new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.REGULAR, applyShadow: false }) };
-      }
-    }
-    return { backgroundColor: $r('app.color.page_bg') };
+    // Material belongs to the individual title buttons. A material covering the
+    // entire bar introduces a tinted strip against the chat canvas in motion.
+    return { backgroundColor: $r('app.color.page_bg'), barStyle: BarStyle.STANDARD };
   }
   static setMode(value: string): void {
     const mode = InteractionPolicy.mode(value);

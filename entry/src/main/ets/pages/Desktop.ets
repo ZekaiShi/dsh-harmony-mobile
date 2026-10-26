@@ -21,6 +21,7 @@ import { NativeComposerAction } from '../components/NativeComposerAction';
 import { NativeBackButton } from '../components/NativeBackButton';
 import { NativeCircleStyle } from '../components/NativeCircleStyle';
 import { BackNavigation } from '../core/BackNavigation';
+import { PageBackdrop } from '../components/PageBackdrop';
 import { HoldingMotion } from '../platform/HoldingMotion';
 import { ComposerToolbar } from '../components/ComposerToolbar';
 import { SessionDrafts, desktopSessionDrafts } from '../core/SessionDrafts';
@@ -28,6 +29,7 @@ import { SessionDrafts, desktopSessionDrafts } from '../core/SessionDrafts';
 @Entry
 @Component
 struct Desktop {
+  @StorageLink('chromeTextColor') private chromeTextColor: string = '#30302E';
   @StorageLink('leftControls') @Watch('handChanged') private leftControls: boolean = false;
   @State private screen: string = 'devices';
   @State private manual: boolean = false;
@@ -620,21 +622,25 @@ struct Desktop {
   @Builder private destination(name: string) {
     if (name === 'pin') {
       NavDestination() { this.pinPage() }
-        .title({ builder: this.pinHeader, height: 60 }, HarmonyExperience.titleOptions()).hideBackButton(true).onBackPressed(() => this.back())
+        .title({ builder: this.pinHeader, height: 60 }, HarmonyExperience.titleOptions()).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => this.back())
     } else if (name === 'sessions') {
       NavDestination() { this.sessionList() }
-        .title({ builder: this.sessionsHeader, height: 60 }, HarmonyExperience.titleOptions()).hideBackButton(true).onBackPressed(() => this.back())
+        .title({ builder: this.sessionsHeader, height: 60 }, HarmonyExperience.titleOptions()).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => this.back())
         .onShown(() => { if (this.screen === 'chat') this.showSessions(); })
     } else if (name === 'chat') {
       NavDestination() { this.chatPage() }
-        .title({ builder: this.chatHeader, height: 60 }, HarmonyExperience.titleOptions()).hideBackButton(true).onBackPressed(() => this.back())
+        .title({ builder: this.chatHeader, height: 60 }, HarmonyExperience.titleOptions()).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => this.back())
     }
   }
   build() {
+    Stack() {
+    PageBackdrop()
     Navigation(this.paths) { this.devices() }
       .navDestination(this.destination).title({ builder: this.deviceHeader, height: 60 }, HarmonyExperience.titleOptions())
       .onNavBarStateChange((visible: boolean) => { if (visible && this.paths.size() === 0 && this.screen !== 'devices') this.showDevices(); })
       .titleMode(NavigationTitleMode.Mini).hideBackButton(true).hideToolBar(true).mode(NavigationMode.Stack)
       .width('100%').height('100%').backgroundColor($r('app.color.page_bg'))
+      .systemBarStyle({ statusBarContentColor: this.chromeTextColor })
+    }.width('100%').height('100%').backgroundColor($r('app.color.page_bg'))
   }
 }

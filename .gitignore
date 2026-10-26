@@ -21,3 +21,5 @@ signing.local.json5
 .env*
 deliveries/
 reports/
+*.log
+.npm-install.log
