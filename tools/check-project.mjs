@@ -11,7 +11,7 @@ const pages = await json('entry/src/main/resources/base/profile/main_pages.json'
 for (const page of pages.src) await access(path.join(root, 'entry/src/main/ets', page + '.ets'));
 const dashboard = await text('entry/src/main/ets/pages/Index.ets');
 const ui = await text('entry/src/main/ets/pages/Desktop.ets');
-assert.ok(dashboard.includes("url: 'pages/Desktop'"), 'Desktop uses the same router entry animation as the other modes');
+assert.ok(dashboard.includes("'open-desktop', 'pages/Desktop'"), 'Desktop uses the same router entry animation as the other modes');
 assert.ok(ui.includes('Navigation(this.paths)') && ui.includes('NavDestination()'), 'Desktop subpages must use native navigation destinations');
 assert.ok(ui.includes('scanBarcode.startScanForResult'));
 assert.ok(ui.includes('result.originalValue'));
@@ -39,7 +39,7 @@ for (const [name, source] of [['Assistant', assistant], ['Desktop', ui]]) {
 }
 assert.ok(assistant.includes('Navigation(this.navigation.paths)') && assistant.includes('NavDestination()'), 'Assistant settings and new chats use native page transitions');
 assert.equal((assistant.match(/this\.screen\s*=(?!=)/g) || []).length, 2, 'Assistant screen writes belong only in forward/return navigation helpers');
-assert.ok(dashboard.includes("url: 'pages/Assistant'"), 'Standalone chat is reachable');
+assert.ok(dashboard.includes("'open-assistant', 'pages/Assistant'"), 'Standalone chat is reachable');
 assert.ok(!assistant.includes('Web({'), 'Standalone chat is ArkUI');
 const modelHttp = await text('entry/src/main/ets/platform/ModelHttp.ets');
 assert.ok(modelHttp.includes('@kit.RemoteCommunicationKit'));
@@ -55,7 +55,7 @@ const media = await text('entry/src/main/ets/pages/Media.ets');
 assert.ok(media.includes('Navigation(this.navigation.paths)') && media.includes('NavDestination()'), 'Media settings and previews use native page transitions');
 assert.equal((media.match(/this\.screen\s*=(?!=)/g) || []).length, 2, 'Media screen writes belong only in forward/return navigation helpers');
 const mediaFiles = await text('entry/src/main/ets/platform/MediaFiles.ets');
-assert.ok(dashboard.includes("url: 'pages/Media'"));
+assert.ok(dashboard.includes("'open-media', 'pages/Media'"));
 assert.ok(media.includes('MediaClient(new ModelHttp())'));
 assert.ok(!media.includes('Web({'));
 assert.ok(mediaFiles.includes('PhotoViewPicker'));

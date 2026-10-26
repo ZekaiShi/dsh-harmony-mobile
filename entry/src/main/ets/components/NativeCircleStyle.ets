@@ -13,7 +13,7 @@ export class NativeCircleStyle implements AttributeModifier<ButtonAttribute> {
     button.width(this.diameter).height(this.diameter).aspectRatio(1).padding(0).flexShrink(0)
       .backgroundColor($r('app.color.surface')).borderRadius(this.diameter / 2).clip(true)
       .buttonStyle(ButtonStyleMode.NORMAL).stateEffect(true);
-    if (deviceInfo.apiAvailable('26.0.0')) {
+    if (deviceInfo.sdkApiVersion >= 26) {
       try {
         if (this.nativeRegion && uiMaterial.isImmersiveMaterialSupported() && uiMaterial.getMaterialInfo().state !== uiMaterial.MaterialState.DISABLE) {
           button.backgroundColor(Color.Transparent).systemMaterial(new uiMaterial.ImmersiveMaterial({

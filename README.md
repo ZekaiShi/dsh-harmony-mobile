@@ -24,9 +24,11 @@
 
 0.9.2 将重命名改为原生动画页面，保存和 AI 命名默认使用标题栏圆形沉浸光感动作；AI 建议可编辑，保存后生效。验收范围见 [docs/VALIDATION_0.9.2.md](docs/VALIDATION_0.9.2.md)。
 
+0.10.0 增加折叠屏响应布局：主页随窗口换列，独立聊天和电脑会话在宽屏显示侧栏，设置与正文保持可读宽度，作品按容器排成图片网格；窄屏和短横屏保留输入与发送。折叠、旋转保留当前会话和草稿。规则、系统要求及验收范围见 [docs/FOLD_ADAPTATION.md](docs/FOLD_ADAPTATION.md)。
+
 ## 开发
 
-需要 Node.js 22+ 和官方 DevEco Studio / HarmonyOS SDK。当前工程配置面向 API 26；较早系统尚未验证。
+需要 Node.js 22+ 和官方 DevEco Studio / HarmonyOS SDK。工程使用 API 26 SDK 编译，安装最低版本设为 HarmonyOS 6.0.0/API 20；API 26 材质能力按系统版本回退。当前原生运行验证使用 API 26 模拟器，API 20 与实体折叠屏仍需补测。原生 HAP 不能直接安装到未升级的 HarmonyOS 4.2 设备。
 
 ```sh
 npm ci

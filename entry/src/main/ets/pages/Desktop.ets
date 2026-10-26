@@ -7,6 +7,8 @@ import { ConnectionPolicy, RecentConnection, RemoteTarget } from '../core/Connec
 import { DshClient } from '../core/DshClient';
 import { ChatReducer } from '../core/ChatReducer';
 import { ChatActivity } from '../core/ChatActivity';
+import { AdaptiveFrame } from '../components/AdaptiveFrame';
+import { AdaptiveMetrics, ResponsiveLayout } from '../core/ResponsiveLayout';
 import { MessageLink } from '../core/MessageLink';
 import { ToolPresentation } from '../core/ToolPresentation';
 import { MarkdownView } from '../components/MarkdownView';
@@ -34,6 +36,7 @@ import { SessionDrafts, desktopSessionDrafts } from '../core/SessionDrafts';
 @Entry
 @Component
 struct Desktop {
+  @State private layout: AdaptiveMetrics = ResponsiveLayout.measure(360, 800);
   @StorageLink('chromeTextColor') private chromeTextColor: string = '#30302E';
   @StorageLink('leftControls') @Watch('handChanged') private leftControls: boolean = false;
   @State private screen: string = 'devices';
@@ -169,7 +172,7 @@ struct Desktop {
   }
   private navigate(page: string): void {
     const previous = this.screen; this.screen = page;
-    if (previous === 'pin') this.paths.replacePath({ name: page }, true);
+    if (previous === 'pin' || previous === 'chat' && page === 'chat') this.paths.replacePath({ name: page }, true);
     else this.paths.pushPath({ name: page }, true);
   }
   private showDevices(): void {
@@ -218,6 +221,7 @@ struct Desktop {
     finally { if (epoch === this.connectionEpoch) this.busy = false; }
   }
   private openSession(item: ServerItem): void {
+    if (this.screen === 'chat' && this.sessionId === item.sessionId) return;
     this.drafts.save(this.client.origin, this.sessionId, this.draft);
     this.stopLive(); this.sessionId = item.sessionId || ''; this.sessionTitle = SessionPresentation.title(item);
     this.error = ''; this.draft = this.drafts.read(this.client.origin, this.sessionId); this.records = []; this.messages = []; this.timeline = []; this.pending = null; this.sending = false; this.questionBusy = false;
@@ -471,8 +475,8 @@ struct Desktop {
   }
   @Builder
   private pinPage() {
+    Scroll() {
     Column({ space: 22 }) {
-      Blank()
       Text('输入电脑显示的密码').fontSize(25).fontWeight(FontWeight.Bold).fontColor($r('app.color.text_primary'))
       Text('互联网连接需要六位密码来确认身份。').fontSize(14).fontColor($r('app.color.text_secondary'))
       TextInput({ text: this.pin, placeholder: '六位连接密码' }).type(InputType.Number).maxLength(6).fontSize(28).textAlign(TextAlign.Center).height(60).width('82%')
@@ -480,8 +484,8 @@ struct Desktop {
       Button(this.busy ? '正在验证…' : '确认连接', { type: ButtonType.Normal }).width('82%').height(50).borderRadius(15).backgroundColor($r('app.color.accent')).fontColor(Color.White)
         .enabled(!this.busy && this.pin.length === 6).onClick(() => { void this.verifyPin(); })
       this.errorBanner()
-      Blank()
-    }.width('100%').height('100%').backgroundColor($r('app.color.page_bg'))
+    }.padding({ top: this.layout.compact ? 16 : 48, bottom: 24 }).width('100%').backgroundColor($r('app.color.page_bg'))
+    }.width('100%').height('100%').scrollBar(BarState.Off)
   }
   @Builder
   private sessionList() {
@@ -612,14 +616,33 @@ struct Desktop {
   }
   @Builder
   private chatPage() {
+    Row({ space: 0 }) {
+      if (this.layout.sidebar > 0) Column({ space: 12 }) {
+        Text('电脑会话').fontSize(17).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary')).width('100%')
+        List({ space: 4 }) {
+          ForEach(this.sessions, (item: ServerItem) => {
+            ListItem() {
+              Text(SessionPresentation.title(item)).fontSize(14).maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+                .fontColor($r('app.color.text_primary')).width('100%').padding(12).borderRadius(14)
+                .backgroundColor(item.sessionId === this.sessionId ? $r('app.color.accent_soft') : Color.Transparent)
+            }.id('dsh-sidebar-' + item.sessionId).onClick(() => this.openSession(item))
+          }, (item: ServerItem) => (item.sessionId || '') + ':' + SessionPresentation.title(item))
+        }.width('100%').layoutWeight(1).scrollBar(BarState.Off)
+      }.padding(16).width(this.layout.sidebar).height('100%').id('dsh-sidebar')
+      Column() {
+        Column() { this.chatPane() }.width(this.layout.chat).height('100%')
+      }.layoutWeight(1).height('100%').alignItems(HorizontalAlign.Center)
+    }.width('100%').height('100%')
+  }
+  @Builder private chatPane() {
     Column({ space: 0 }) {
       Row({ space: 12 }) {
         Button('复制会话', { type: ButtonType.Normal }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).id('dsh-copy-conversation').onClick(() => this.copyText(ConversationExport.markdown(ConversationExport.desktop(this.sessionTitle, this.messages, this.historyHasMore))))
         Button('Token', { type: ButtonType.Normal }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).id('dsh-usage').onClick(() => this.usageDetails())
         Button(this.exporting ? '导出中…' : '导出', { type: ButtonType.Normal }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).id('dsh-export').enabled(!this.exporting && this.messages.length > 0).bindMenu(this.exportOptions)
         Blank()
-      }.width('100%').padding({ left: 18, right: 18 })
-      this.errorBanner()
+      }.width('100%').padding({ left: 18, right: 18 }).visibility(this.layout.tight ? Visibility.None : Visibility.Visible)
+      Column() { this.errorBanner() }.width('100%').visibility(this.layout.tight ? Visibility.None : Visibility.Visible)
       List({ scroller: this.scroller, space: 26 }) {
         if (this.messages.length === 0) {
           ListItem() {
@@ -649,21 +672,22 @@ struct Desktop {
             }.width('100%').alignItems(message.role === 'user' ? HorizontalAlign.End : HorizontalAlign.Start)
           }
         }, (message: ChatMessage) => message.id + ':' + message.version)
-      }.padding({ left: 24, right: 24, top: 24, bottom: 12 }).layoutWeight(1).width('100%').scrollBar(BarState.Off)
+      }.padding({ left: 24, right: 24, top: this.layout.tight ? 2 : 24, bottom: this.layout.tight ? 2 : 12 }).layoutWeight(1).width('100%').scrollBar(BarState.Off)
         .id('dsh-messages').onTouch((event: TouchEvent) => { if (event.type === TouchType.Down) Keyboard.dismiss(this.getUIContext()); })
         .onDidScroll((offset: number, state: ScrollState) => { if (state !== ScrollState.Idle) this.followBottom = this.scroller.isAtEnd(); })
       if (this.pending !== null) this.questionPanel()
       else {
         Column({ space: 0 }) {
         Column({ space: 2 }) {
-          TextArea({ text: this.draft, placeholder: '回复…' }).height(64).fontSize(16).padding({ left: 17, right: 17, top: 16, bottom: 4 }).borderRadius(22)
+          TextArea({ text: this.draft, placeholder: '回复…' }).height(this.layout.tight ? 38 : this.layout.compact ? 46 : 64).fontSize(16).padding({ left: 17, right: 17, top: this.layout.tight ? 3 : this.layout.compact ? 7 : 16, bottom: 4 }).borderRadius(22)
             .backgroundColor(Color.Transparent).fontColor($r('app.color.text_primary')).id('dsh-draft').onChange((text: string) => { this.draft = text; })
           ComposerToolbar({ side: this.composerSide,
             details: (): void => { this.composerDetails(); }, action: (): void => { this.composerAction(); } })
         }.width('100%').backgroundColor($r('app.color.surface')).border({ width: 0.7, color: $r('app.color.line') }).borderRadius(24)
-        }.padding({ left: 14, right: 14, top: 8, bottom: 12 }).width('100%').backgroundColor($r('app.color.page_bg'))
+        }.padding({ left: 14, right: 14, top: this.layout.tight ? 2 : 8, bottom: this.layout.tight ? 2 : 12 }).width('100%').backgroundColor($r('app.color.page_bg'))
       }
     }.width('100%').height('100%').backgroundColor($r('app.color.page_bg'))
+
   }
   @Builder private composerDetails() { Text(this.running ? '正在处理' : 'DSH Desktop').fontSize(12).fontColor($r('app.color.text_secondary')).layoutWeight(1).direction(Direction.Ltr) }
   @Builder private composerAction() {
@@ -676,26 +700,27 @@ struct Desktop {
   @Builder private chatHeader() { this.header('chat') }
   @Builder private destination(name: string) {
     if (name === 'pin') {
-      NavDestination() { this.pinPage() }
+      NavDestination() { AdaptiveFrame({ maxWidth: 520, content: (): void => { this.pinPage(); } }) }
         .title({ builder: this.pinHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => this.back())
     } else if (name === 'sessions') {
-      NavDestination() { this.sessionList() }
+      NavDestination() { AdaptiveFrame({ maxWidth: 760, content: (): void => { this.sessionList(); } }) }
         .title({ builder: this.sessionsHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => this.back())
         .onShown(() => { if (this.screen === 'chat') this.showSessions(); })
     } else if (name === 'chat') {
       NavDestination() { this.chatPage() }
-        .title({ builder: this.chatHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => this.back())
+        .title({ builder: this.chatHeader, height: 60 }, HarmonyExperience.titleOptions()).hideTitleBar(this.layout.tight).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => this.back())
     }
   }
   build() {
     Stack() {
     PageBackdrop()
-    Navigation(this.paths) { this.devices() }
+    Navigation(this.paths) { AdaptiveFrame({ maxWidth: 640, content: (): void => { this.devices(); } }) }
       .navDestination(this.destination).title({ builder: this.deviceHeader, height: 60 }, HarmonyExperience.titleOptions())
       .onNavBarStateChange((visible: boolean) => { if (visible && this.paths.size() === 0 && this.screen !== 'devices') this.showDevices(); })
       .titleMode(NavigationTitleMode.Mini).hideBackButton(true).hideToolBar(true).mode(NavigationMode.Stack)
       .width('100%').height('100%').backgroundColor($r('app.color.page_bg'))
       .ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor })
     }.width('100%').height('100%').backgroundColor($r('app.color.page_bg'))
+      .onSizeChange((oldSize: SizeOptions, size: SizeOptions) => { this.layout = ResponsiveLayout.measure(Number(size.width), Number(size.height)); })
   }
 }

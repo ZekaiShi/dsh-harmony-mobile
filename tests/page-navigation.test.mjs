@@ -32,6 +32,10 @@ test('repeated ordinary taps do not pile up identical settings pages, but a fres
   const navigation=new PageNavigation('main');navigation.forward('settings');navigation.forward('settings');assert.deepEqual(navigation.paths.names,['settings']);
   navigation.forward('chat',true);navigation.forward('chat',true);assert.deepEqual(navigation.paths.names,['settings','chat','chat']);
 });
+test('wide-pane conversation selection replaces its destination instead of growing the back stack',()=>{
+ const navigation=new PageNavigation('list');navigation.forward('chat',true);navigation.forward('chat',true,true);navigation.forward('chat',true,true);
+ assert.deepEqual(navigation.paths.names,['chat']);assert.deepEqual(navigation.paths.calls.map(c=>c[0]),['push','replace','replace']);
+});
 test('media preview returns through detail and history; missing stale parents recover using an animated replacement',()=>{
   const navigation=new PageNavigation('main');for(const page of ['history','detail','preview'])navigation.forward(page);
   navigation.backward('detail');assert.deepEqual(navigation.paths.names,['history','detail']);navigation.backward('history');assert.deepEqual(navigation.paths.names,['history']);

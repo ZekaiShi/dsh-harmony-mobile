@@ -21,10 +21,14 @@ import { PageBackdrop } from '../components/PageBackdrop';
 import { ConversationExport } from '../core/ConversationExport';
 import { ConversationFiles } from '../platform/ConversationFiles';
 import { ExportOptions } from '../components/ExportOptions';
+import { AdaptiveFrame } from '../components/AdaptiveFrame';
+import { AdaptiveMetrics, ResponsiveLayout } from '../core/ResponsiveLayout';
 
 @Entry
 @Component
 struct Media {
+  @State private layout: AdaptiveMetrics = ResponsiveLayout.measure(360, 800);
+  @State private galleryWidth: number = 312;
   @StorageLink('chromeTextColor') private chromeTextColor: string = '#30302E';
   @State private screen: string = 'main';
   @State private provider: string = 'compatible';
@@ -246,7 +250,7 @@ struct Media {
           Button(this.purpose === 'vision' ? '从相册选择' : '添加参考图', { type: ButtonType.Normal }).height(44).layoutWeight(1).fontSize(13).borderRadius(22).backgroundColor($r('app.color.accent_soft')).fontColor($r('app.color.text_primary')).id('media-pick').onClick(() => { void this.chooseImage(); })
           Button('从文件选择', { type: ButtonType.Normal }).height(44).layoutWeight(1).fontSize(13).borderRadius(22).backgroundColor($r('app.color.accent_soft')).fontColor($r('app.color.text_primary')).id('media-pick-file').onClick(() => { void this.chooseImage(true); })
         }.width('100%')
-        TextArea({ text: this.prompt, placeholder: this.purpose === 'vision' ? '想了解这张图片的什么？' : '描述你想生成的图像…' }).height(140).fontSize(16).lineHeight(25).padding(16).backgroundColor($r('app.color.surface')).fontColor($r('app.color.text_primary')).borderRadius(18).maxLength(16000).id('media-prompt').onChange((value: string) => { this.prompt = value; this.scheduleSave(); })
+        TextArea({ text: this.prompt, placeholder: this.purpose === 'vision' ? '想了解这张图片的什么？' : '描述你想生成的图像…' }).height(this.layout.compact ? 90 : 140).fontSize(16).lineHeight(25).padding(16).backgroundColor($r('app.color.surface')).fontColor($r('app.color.text_primary')).borderRadius(18).maxLength(16000).id('media-prompt').onChange((value: string) => { this.prompt = value; this.scheduleSave(); })
         this.banner()
         this.primary(this.profile.model ? this.purpose === 'vision' ? '分析图片' : '生成图像' : '先配置图像模型', 'media-run', () => { void this.run(); })
         Text('请求直接发送给你配置的服务，按服务商规则计费。生成结果下载到本机，断网仍可查看；导出时由你选择保存位置。').fontSize(12).lineHeight(21).fontColor($r('app.color.text_secondary')).width('100%')
@@ -325,6 +329,7 @@ struct Media {
         Text(MediaCore.label(this.active.profile.provider) + ' · ' + (this.active.purpose === 'vision' ? this.active.profile.visionModel || this.active.profile.model : this.active.profile.model)).fontSize(11).fontColor($r('app.color.text_secondary')).width('100%')
         if (this.active.input) Image(this.files.uri(this.active.input)).width(80).height(80).objectFit(ImageFit.Cover).borderRadius(12).onClick(() => this.showPreview(this.active.input!, 'detail'))
         if (this.activeStatus === 'pending') { LoadingProgress().width(32).height(32).color($r('app.color.accent')); Text('等待服务返回结果并保存到本机…').fontSize(13).fontColor($r('app.color.text_secondary')); this.primary('停止', 'media-stop', () => this.stop()) }
+        Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.SpaceBetween }) {
         ForEach(this.outputs, (asset: ImageAsset, index: number) => {
           Column({ space: 8 }) {
             Image(this.files.uri(asset)).width('100%').aspectRatio(asset.width / asset.height).constraintSize({ maxHeight: 380 }).objectFit(ImageFit.Contain).borderRadius(16).id('media-result-' + index).onClick(() => this.showPreview(asset, 'detail'))
@@ -333,8 +338,9 @@ struct Media {
               Button('预览', { type: ButtonType.Normal }).fontSize(12).height(36).backgroundColor(Color.Transparent).fontColor($r('app.color.text_primary')).id('media-preview-' + index).onClick(() => this.showPreview(asset, 'detail'))
               Button('导出图片', { type: ButtonType.Normal }).fontSize(12).height(36).backgroundColor($r('app.color.accent_soft')).fontColor($r('app.color.text_primary')).borderRadius(18).id('media-export-' + index).onClick(() => { void this.export(asset); })
             }.width('100%')
-          }.width('100%')
+          }.width(ResponsiveLayout.imageCard(this.galleryWidth)).margin({ bottom: 16 })
         }, (asset: ImageAsset) => asset.file)
+        }.width('100%').onSizeChange((oldSize: SizeOptions, size: SizeOptions) => { this.galleryWidth = Number(size.width); })
         if (this.activeText) MarkdownView({ content: this.activeText })
         if (this.activeError) Text(this.activeError).fontSize(13).lineHeight(22).fontColor($r('app.color.danger')).width('100%')
         if (this.activeStatus !== 'pending') {
@@ -382,29 +388,30 @@ struct Media {
   @Builder private previewHeader() { this.header('preview') }
   @Builder private destination(page: string) {
     if (page === 'settings') {
-      NavDestination() { Column() { this.settings() }.width('100%').height('100%') }.title({ builder: this.settingsHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
+      NavDestination() { AdaptiveFrame({ maxWidth: this.layout.form, content: (): void => { this.settings(); } }) }.title({ builder: this.settingsHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
     }
     else if (page === 'models') {
-      NavDestination() { Column() { this.modelsPage() }.width('100%').height('100%') }.title({ builder: this.modelsHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
+      NavDestination() { AdaptiveFrame({ maxWidth: this.layout.form, content: (): void => { this.modelsPage(); } }) }.title({ builder: this.modelsHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
     }
     else if (page === 'history') {
-      NavDestination() { Column() { this.history() }.width('100%').height('100%') }.title({ builder: this.historyHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
+      NavDestination() { AdaptiveFrame({ maxWidth: this.layout.form, content: (): void => { this.history(); } }) }.title({ builder: this.historyHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
     }
     else if (page === 'detail') {
-      NavDestination() { Column() { this.detail() }.width('100%').height('100%') }.title({ builder: this.detailHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
+      NavDestination() { AdaptiveFrame({ maxWidth: this.layout.gallery, content: (): void => { this.detail(); } }) }.title({ builder: this.detailHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
     }
     else if (page === 'preview') {
-      NavDestination() { Column() { this.previewPage() }.width('100%').height('100%') }.title({ builder: this.previewHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
+      NavDestination() { AdaptiveFrame({ maxWidth: this.layout.gallery, content: (): void => { this.previewPage(); } }) }.title({ builder: this.previewHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
     }
   }
   build() {
     Stack() {
     PageBackdrop()
-    Navigation(this.navigation.paths) { Column() { this.main() }.width('100%').height('100%') }
+    Navigation(this.navigation.paths) { AdaptiveFrame({ maxWidth: this.layout.form, content: (): void => { this.main(); } }) }
       .navDestination(this.destination).title({ builder: this.mainHeader, height: 60 }, HarmonyExperience.titleOptions())
       .titleMode(NavigationTitleMode.Mini).hideBackButton(true).hideToolBar(true).mode(NavigationMode.Stack)
       .width('100%').height('100%').backgroundColor($r('app.color.page_bg'))
       .ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor })
     }.width('100%').height('100%').backgroundColor($r('app.color.page_bg'))
+      .onSizeChange((oldSize: SizeOptions, size: SizeOptions) => { this.layout = ResponsiveLayout.measure(Number(size.width), Number(size.height)); })
   }
 }

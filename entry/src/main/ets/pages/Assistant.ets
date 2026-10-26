@@ -29,10 +29,13 @@ import { ConversationTitle } from '../core/ConversationTitle';
 import { ConversationExport } from '../core/ConversationExport';
 import { ConversationFiles } from '../platform/ConversationFiles';
 import { ExportOptions } from '../components/ExportOptions';
+import { AdaptiveFrame } from '../components/AdaptiveFrame';
+import { AdaptiveMetrics, ResponsiveLayout } from '../core/ResponsiveLayout';
 
 @Entry
 @Component
 struct Assistant {
+  @State private layout: AdaptiveMetrics = ResponsiveLayout.measure(360, 800);
   @StorageLink('chromeTextColor') private chromeTextColor: string = '#30302E';
   @StorageLink('leftControls') @Watch('handChanged') private leftControls: boolean = false;
   @State private screen: string = 'list';
@@ -101,7 +104,7 @@ struct Assistant {
     if (this.composerSide === target) return;
     HoldingMotion.swap(this.getUIContext(), () => { this.composerSide = target; }, (lift: number) => { this.composerLift = lift; });
   }
-  private forward(page: string, fresh: boolean = false): void { this.screen = page; this.navigation.forward(page, fresh); }
+  private forward(page: string, fresh: boolean = false): void { const replace = page === 'chat' && this.screen === 'chat' && this.layout.sidebar > 0; this.screen = page; this.navigation.forward(page, fresh, replace); }
   private returnTo(page: string): void { this.screen = page; this.navigation.backward(page); }
   aboutToAppear(): void {
     this.composerSide = this.leftControls ? 0 : 1; this.motionReady = true;
@@ -127,6 +130,7 @@ struct Assistant {
     if (this.follow) setTimeout(() => { try { this.scroller.scrollEdge(Edge.Bottom); } catch (_) {} }, 40);
   }
   private open(conversation: LocalConversation): void {
+    if (this.screen === 'chat' && this.active.id === conversation.id) return;
     this.attachmentEpoch++; this.stop(); this.save(); this.active = conversation; this.draft = conversation.draft; this.attachments = (conversation.draftAttachments || []).slice(); this.reasoningLevel = conversation.profile.reasoningLevel || 'auto'; this.error = ''; this.forward('chat', true); this.follow = true; this.changed();
   }
   private createConversation(): void {
@@ -545,15 +549,40 @@ struct Assistant {
       }.layoutWeight(1).width('100%').scrollBar(BarState.Off)
     }.width('100%').height('100%')
   }
+  @Builder private conversationSidebar() {
+    Column({ space: 12 }) {
+      Text('本机会话').fontSize(17).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary')).width('100%').visibility(this.layout.tight ? Visibility.None : Visibility.Visible)
+      TextInput({ text: this.query, placeholder: '搜索会话' }).height(40).fontSize(13).backgroundColor($r('app.color.accent_soft')).id('assistant-sidebar-search').onChange((text: string) => { this.query = text; }).visibility(this.layout.tight ? Visibility.None : Visibility.Visible)
+      List({ space: 4 }) {
+        ForEach(AssistantCore.search(this.conversations, this.query), (conversation: LocalConversation) => {
+          ListItem() {
+            Column({ space: 6 }) {
+              Text(conversation.title).fontSize(14).maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis }).fontColor($r('app.color.text_primary'))
+              Text(conversation.profile.model).fontSize(11).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).fontColor($r('app.color.text_secondary'))
+            }.width('100%').alignItems(HorizontalAlign.Start).padding(12).borderRadius(14)
+              .backgroundColor(conversation.id === this.active.id ? $r('app.color.accent_soft') : Color.Transparent)
+          }.id('assistant-sidebar-' + conversation.id).onClick(() => this.open(conversation))
+        }, (conversation: LocalConversation) => conversation.id + ':' + conversation.updatedAt + ':' + this.revision)
+      }.width('100%').layoutWeight(1).scrollBar(BarState.Off)
+    }.padding(16).width(this.layout.sidebar).height('100%').id('assistant-sidebar')
+  }
   @Builder private chat() {
+    Row({ space: 0 }) {
+      if (this.layout.sidebar > 0) this.conversationSidebar()
+      Column() {
+        Column() { this.chatPane() }.width(this.layout.chat).height('100%')
+      }.layoutWeight(1).height('100%').alignItems(HorizontalAlign.Center)
+    }.width('100%').height('100%')
+  }
+  @Builder private chatPane() {
     Column({ space: 0 }) {
       Row({ space: 4 }) {
         Button('重命名', { type: ButtonType.Normal }).layoutWeight(1).padding({ left: 8, right: 8 }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).id('assistant-rename').onClick(() => this.openRename())
         Button('复制会话', { type: ButtonType.Normal }).layoutWeight(1).padding({ left: 8, right: 8 }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).id('assistant-copy-conversation').onClick(() => this.copy(AssistantCore.transcript(this.active)))
         Button('Token', { type: ButtonType.Normal }).layoutWeight(1).padding({ left: 8, right: 8 }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).id('assistant-usage').onClick(() => this.usageDetails())
         Button(this.exporting ? '导出中…' : '导出', { type: ButtonType.Normal }).layoutWeight(1).padding({ left: 8, right: 8 }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).id('assistant-export').enabled(!this.exporting && this.active.messages.length > 0).bindMenu(this.exportOptions)
-      }.padding({ left: 15, right: 23 }).width('100%')
-      this.banner()
+      }.padding({ left: 15, right: 23 }).width('100%').visibility(this.layout.tight ? Visibility.None : Visibility.Visible)
+      Column() { this.banner() }.width('100%').visibility(this.layout.tight ? Visibility.None : Visibility.Visible)
       List({ scroller: this.scroller, space: 24 }) {
         if (!this.active.messages.length) ListItem() {
           Column({ space: 13 }) {
@@ -599,7 +628,7 @@ struct Assistant {
             }.width('100%').alignItems(message.role === 'user' ? HorizontalAlign.End : HorizontalAlign.Start)
           }
         }, (message: LocalMessage) => message.id + ':' + this.revision)
-      }.layoutWeight(1).width('100%').padding({ left: 24, right: 24, top: 20, bottom: 12 }).scrollBar(BarState.Off)
+      }.layoutWeight(1).width('100%').padding({ left: 24, right: 24, top: this.layout.tight ? 2 : 20, bottom: this.layout.tight ? 2 : 12 }).scrollBar(BarState.Off)
         .id('assistant-messages').onTouch((event: TouchEvent) => { if (event.type === TouchType.Down) Keyboard.dismiss(this.getUIContext()); })
         .onDidScroll((offset: number, state: ScrollState) => { if (state !== ScrollState.Idle) this.follow = this.scroller.isAtEnd(); })
       Column() {
@@ -620,13 +649,13 @@ struct Assistant {
                 }.height(38).padding({ left: 6, right: 2 }).borderRadius(10).backgroundColor($r('app.color.accent_soft'))
               }, (ref: ChatAttachment) => ref.file)
             }.padding({ left: 12, right: 12, top: 10 })
-          }.width('100%').scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
-        TextArea({ text: this.draft, placeholder: this.picking ? '正在添加附件…' : '发消息…' }).height(62).maxLength(16000).fontSize(16).padding({ left: 17, right: 17, top: 15, bottom: 4 }).backgroundColor(Color.Transparent).id('assistant-draft').onChange((text: string) => { this.draft = text; this.active.draft = text; this.updateContext(); this.scheduleSave(); })
+          }.width('100%').scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off).visibility(this.layout.tight ? Visibility.None : Visibility.Visible)
+        TextArea({ text: this.draft, placeholder: this.picking ? '正在添加附件…' : '发消息…' }).height(this.layout.tight ? 38 : this.layout.compact ? 46 : 62).maxLength(16000).fontSize(16).padding({ left: 17, right: 17, top: this.layout.tight ? 3 : this.layout.compact ? 7 : 15, bottom: 4 }).backgroundColor(Color.Transparent).id('assistant-draft').onChange((text: string) => { this.draft = text; this.active.draft = text; this.updateContext(); this.scheduleSave(); })
           ComposerToolbar({ side: this.composerSide,
             details: (): void => { this.composerDetails(); }, action: (): void => { this.composerAction(); } })
         }.width('calc(100% - 50vp)').direction(Direction.Ltr).translate({ x: 50 * (1 - this.composerSide) }).backgroundColor($r('app.color.surface')).border({ width: 0.7, color: $r('app.color.line') }).borderRadius(24)
       }.width('100%').onAreaChange((oldArea: Area, newArea: Area) => { const width = Number.parseFloat(String(newArea.width)); if (Number.isFinite(width) && width !== this.composerWidth) this.composerWidth = width; })
-      }.padding({ left: 14, right: 14, top: 8, bottom: 12 }).width('100%')
+      }.padding({ left: 14, right: 14, top: this.layout.tight ? 2 : 8, bottom: this.layout.tight ? 2 : 12 }).width('100%')
     }.width('100%').height('100%')
   }
   @Builder private composerDetails() {
@@ -698,35 +727,36 @@ struct Assistant {
   @Builder private privacyHeader() { this.header('privacy') }
   @Builder private destination(page: string) {
     if (page === 'rename') {
-      NavDestination() { this.renamePage() }.title({ builder: this.renameHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
+      NavDestination() { AdaptiveFrame({ maxWidth: this.layout.form, content: (): void => { this.renamePage(); } }) }.title({ builder: this.renameHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
     }
     else if (page === 'chat') {
-      NavDestination() { this.chat() }.title({ builder: this.chatHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
+      NavDestination() { this.chat() }.title({ builder: this.chatHeader, height: 60 }, HarmonyExperience.titleOptions()).hideTitleBar(this.layout.tight).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
     }
     else if (page === 'settings') {
-      NavDestination() { this.settingsPage() }.title({ builder: this.settingsHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
+      NavDestination() { AdaptiveFrame({ maxWidth: this.layout.form, content: (): void => { this.settingsPage(); } }) }.title({ builder: this.settingsHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
     }
     else if (page === 'providers') {
-      NavDestination() { this.providersPage() }.title({ builder: this.providersHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
+      NavDestination() { AdaptiveFrame({ maxWidth: this.layout.form, content: (): void => { this.providersPage(); } }) }.title({ builder: this.providersHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
     }
     else if (page === 'models') {
-      NavDestination() { this.modelsPage() }.title({ builder: this.modelsHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
+      NavDestination() { AdaptiveFrame({ maxWidth: this.layout.form, content: (): void => { this.modelsPage(); } }) }.title({ builder: this.modelsHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
     }
     else if (page === 'context') {
-      NavDestination() { this.contextPage() }.title({ builder: this.contextHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
+      NavDestination() { AdaptiveFrame({ maxWidth: this.layout.form, content: (): void => { this.contextPage(); } }) }.title({ builder: this.contextHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
     }
     else if (page === 'privacy') {
-      NavDestination() { this.privacy() }.title({ builder: this.privacyHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
+      NavDestination() { AdaptiveFrame({ maxWidth: this.layout.form, content: (): void => { this.privacy(); } }) }.title({ builder: this.privacyHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
     }
   }
   build() {
     Stack() {
     PageBackdrop()
-    Navigation(this.navigation.paths) { this.history() }
+    Navigation(this.navigation.paths) { AdaptiveFrame({ maxWidth: this.layout.form, content: (): void => { this.history(); } }) }
       .navDestination(this.destination).title({ builder: this.listHeader, height: 60 }, HarmonyExperience.titleOptions())
       .titleMode(NavigationTitleMode.Mini).hideBackButton(true).hideToolBar(true).mode(NavigationMode.Stack)
       .width('100%').height('100%').backgroundColor($r('app.color.page_bg'))
       .ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor })
     }.width('100%').height('100%').backgroundColor($r('app.color.page_bg'))
+      .onSizeChange((oldSize: SizeOptions, size: SizeOptions) => { this.layout = ResponsiveLayout.measure(Number(size.width), Number(size.height)); })
   }
 }

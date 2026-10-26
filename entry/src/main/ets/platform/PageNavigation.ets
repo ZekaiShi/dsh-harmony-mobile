@@ -3,8 +3,9 @@ export class PageNavigation {
   paths: NavPathStack = new NavPathStack();
   private root: string;
   constructor(root: string) { this.root = root; }
-  forward(page: string, fresh: boolean = false): void {
+  forward(page: string, fresh: boolean = false, replaceCurrent: boolean = false): void {
     const names = this.paths.getAllPathName();
+    if (replaceCurrent && names.length && names[names.length - 1] === page) { this.paths.replacePath({ name: page }, true); return; }
     if (!fresh && (names[names.length - 1] || this.root) === page) return;
     this.paths.pushPath({ name: page }, true);
   }

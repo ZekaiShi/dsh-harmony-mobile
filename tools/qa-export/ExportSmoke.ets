@@ -31,11 +31,24 @@ struct ExportSmoke {
     const conversation = AssistantCore.create('qa-menu', profile, Date.now()); conversation.title = '菜单隔离验收'; conversation.titleSource = 'manual'; conversation.titleState = 'done';
     const user = new LocalMessage(); user.id = 'qa-user'; user.text = '仅用于菜单验收。';
     const reply = new LocalMessage(); reply.id = 'qa-reply'; reply.role = 'assistant'; reply.text = '这是一条虚构回复，没有模型请求。';
-    conversation.messages = [user, reply]; data.conversations = [conversation]; store.save(data);
+    reply.text += '\n\n## 折叠屏排版\n\n| 对象 | 结果 | 说明 |\n| --- | --- | --- |\n| 长路径文件引用 | 正常 | profiles/web/node_modules/very-long-package-name/package.json |\n\n```typescript\nconst value = "仅供原生窗口比例测试";\n```';
+    const second = AssistantCore.create('qa-second', profile, Date.now()); second.title = '另一条隔离会话'; second.titleSource = 'manual'; second.titleState = 'done'; second.messages = [user, reply];
+    conversation.messages = [user, reply]; data.conversations = [conversation, second]; store.save(data);
     const files = new MediaFiles(); files.load(context);
     const media = new MediaData(), record = new MediaRecord(), mediaProfile = new MediaProfile();
     mediaProfile.base = 'https://example.invalid/v1'; mediaProfile.model = 'qa-image'; record.profile = mediaProfile;
     record.id = 'qa-menu'; record.createdAt = Date.now(); record.status = 'done'; record.prompt = '虚构图像问答'; record.text = '仅用于菜单验收的文字，不请求服务。';
+    for (let index = 0; index < 3; index++) {
+      const width = index === 1 ? 160 : 320, height = index === 1 ? 240 : index === 2 ? 120 : 200;
+      const canvas = new OffscreenCanvas(width, height, LengthMetricsUnit.PX), drawing = canvas.getContext('2d');
+      drawing.fillStyle = index === 0 ? '#dce7f1' : index === 1 ? '#e8dfd1' : '#dce8d7'; drawing.fillRect(0, 0, width, height);
+      drawing.fillStyle = '#30302e'; drawing.font = '18px sans-serif'; drawing.fillText('QA 图片 ' + (index + 1), 12, 40);
+      const pixels = drawing.getPixelMap(0, 0, width, height), packer = image.createImagePacker(), name = 'qa-fold-' + index + '.png';
+      const output = fileIo.openSync(context.filesDir + '/media/' + name, fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.TRUNC);
+      try { await packer.packToFile(pixels, output.fd, { format: 'image/png', quality: 100 }); }
+      finally { fileIo.closeSync(output); await pixels.release(); await packer.release(); canvas.width = 0; canvas.height = 0; }
+      record.images.push({ file: name, mime: 'image/png', width: width, height: height });
+    }
     media.history = [record]; files.save(media); this.result = '菜单测试数据已准备';
   }
   private async generate(): Promise<void> {

@@ -20,6 +20,7 @@
         "startWindowIcon": "$media:app_icon",
         "startWindowBackground": "$color:start_window_background",
         "launchType": "singleton",
+        "orientation": "auto_rotation",
         "exported": true,
         "skills": [{ "entities": ["entity.system.home"], "actions": ["ohos.want.action.home"] }]
       }

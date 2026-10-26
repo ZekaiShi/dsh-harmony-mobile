@@ -35,7 +35,7 @@ export class HarmonyExperience {
     AppStorage.setOrCreate('materialSupported', HarmonyExperience.materialSupported());
   }
   static materialSupported(): boolean {
-    try { return deviceInfo.apiAvailable('26.0.0') && uiMaterial.isImmersiveMaterialSupported() && uiMaterial.getMaterialInfo().state !== uiMaterial.MaterialState.DISABLE; }
+    try { return deviceInfo.sdkApiVersion >= 26 && uiMaterial.isImmersiveMaterialSupported() && uiMaterial.getMaterialInfo().state !== uiMaterial.MaterialState.DISABLE; }
     catch (_) { return false; }
   }
   static titleOptions(): NavigationTitleOptions {

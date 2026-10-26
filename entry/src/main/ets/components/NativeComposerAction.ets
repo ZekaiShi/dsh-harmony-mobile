@@ -7,7 +7,7 @@ class NativeToggleMaterial implements AttributeModifier<ToggleAttribute> {
   applyNormalAttribute(toggle: ToggleAttribute): void {
     toggle.width(44).height(44).aspectRatio(1).padding(0).borderRadius(22).clip(true)
       .backgroundColor($r('app.color.ink')).selectedColor($r('app.color.ink'));
-    if (deviceInfo.apiAvailable('26.0.0')) {
+    if (deviceInfo.sdkApiVersion >= 26) {
       try {
         if (uiMaterial.isImmersiveMaterialSupported() && uiMaterial.getMaterialInfo().state !== uiMaterial.MaterialState.DISABLE) {
           toggle.backgroundColor(Color.Transparent).selectedColor(Color.Transparent)
