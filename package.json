@@ -1,0 +1,27 @@
+{
+  "name": "dsh-connect-harmonyos",
+  "version": "0.8.6",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node tools/prepare-core.mjs && node --test --test-isolation=none tests/*.test.mjs",
+    "typecheck": "tsc -p tsconfig.core.json",
+    "check": "npm run typecheck && npm test && node tools/check-project.mjs",
+    "upstream:prepare": "node tools/prepare-upstream.mjs",
+    "verify:browser": "node tools/verify-browser.mjs",
+    "verify:emulator": "node tools/verify-emulator.mjs",
+    "preview": "node tools/preview-server.mjs",
+    "doctor": "node tools/doctor.mjs",
+    "build:hap": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/build.ps1",
+    "lint:native": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/native-lint.ps1",
+    "verify:assistant": "node tools/verify-assistant-emulator.mjs",
+    "verify:media": "node tools/verify-media-emulator.mjs",
+    "verify:providers": "node tools/verify-providers-emulator.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.56.1",
+    "qrcode": "1.5.4",
+    "typescript": "5.9.3",
+    "ws": "8.22.0"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "modelVersion": "6.0.0",
+  "name": "dsh-connect-harmonyos",
+  "version": "0.8.6",
+  "description": "HarmonyOS companion for the existing DSH Desktop phone pairing",
+  "dependencies": {},
+  "devDependencies": {}
+}

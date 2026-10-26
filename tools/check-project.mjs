@@ -1,0 +1,71 @@
+import { readFile, access, mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+const root = path.resolve(import.meta.dirname, '..');
+const text = relative => readFile(path.join(root, relative), 'utf8');
+const json = async relative => JSON.parse(await text(relative));
+const module = (await json('entry/src/main/module.json5')).module;
+assert.ok(module.deviceTypes.includes('phone'));
+assert.deepEqual(module.requestPermissions.map(row => row.name), ['ohos.permission.INTERNET', 'ohos.permission.DETECT_GESTURE']);
+const pages = await json('entry/src/main/resources/base/profile/main_pages.json');
+for (const page of pages.src) await access(path.join(root, 'entry/src/main/ets', page + '.ets'));
+const dashboard = await text('entry/src/main/ets/pages/Index.ets');
+const ui = await text('entry/src/main/ets/pages/Desktop.ets');
+assert.ok(dashboard.includes("url: 'pages/Desktop'"), 'Desktop uses the same router entry animation as the other modes');
+assert.ok(ui.includes('Navigation(this.paths)') && ui.includes('NavDestination()'), 'Desktop subpages must use native navigation destinations');
+assert.ok(ui.includes('scanBarcode.startScanForResult'));
+assert.ok(ui.includes('result.originalValue'));
+assert.ok(ui.includes('ConnectionPolicy.parse(raw)'));
+assert.ok(ui.includes('new DshClient(new NativeHttp(), new SessionSecrets())'));
+assert.ok(ui.includes('KeyboardAvoidMode.RESIZE'));
+assert.ok(ui.includes('TextArea({ text: this.draft'));
+assert.ok(ui.includes("this.client.rpc('session.prompt'"));
+assert.ok(ui.includes("this.client.rpc('interaction.answer'"));
+assert.ok(!ui.includes('Web({'), 'Chat must be ArkUI, with no embedded webpage');
+const http = await text('entry/src/main/ets/platform/NativeHttp.ets');
+assert.ok(http.includes('maxRedirects: 0'));
+assert.ok(!http.includes('skipRemoteValidation'));
+const secrets = await text('entry/src/main/ets/platform/SessionSecrets.ets');
+assert.ok(secrets.includes('@kit.AssetStoreKit'));
+assert.ok(!secrets.includes('preferences'));
+assert.ok(!ui.includes('javaScriptProxy'));
+assert.ok(!ui.includes('handleConfirm()'));
+assert.ok(!/console\.(log|info|error)/.test(ui), 'No scanned URLs or credentials logged');
+const assistant = await text('entry/src/main/ets/pages/Assistant.ets');
+for (const [name, source] of [['Assistant', assistant], ['Desktop', ui]]) {
+  assert.ok(/details:\s*\(\): void\s*=>\s*\{\s*this\.composerDetails\(\);\s*\}/.test(source), name + ' toolbar details must retain the parent builder receiver');
+  assert.ok(/action:\s*\(\): void\s*=>\s*\{\s*this\.composerAction\(\);\s*\}/.test(source), name + ' toolbar action must retain the parent builder receiver');
+  assert.ok(!/details:\s*this\.composerDetails\b|action:\s*this\.composerAction\b/.test(source), name + ' must not pass an unbound parent Builder to BuilderParam');
+}
+assert.ok(assistant.includes('Navigation(this.navigation.paths)') && assistant.includes('NavDestination()'), 'Assistant settings and new chats use native page transitions');
+assert.equal((assistant.match(/this\.screen\s*=(?!=)/g) || []).length, 2, 'Assistant screen writes belong only in forward/return navigation helpers');
+assert.ok(dashboard.includes("url: 'pages/Assistant'"), 'Standalone chat is reachable');
+assert.ok(!assistant.includes('Web({'), 'Standalone chat is ArkUI');
+const modelHttp = await text('entry/src/main/ets/platform/ModelHttp.ets');
+assert.ok(modelHttp.includes('@kit.RemoteCommunicationKit'));
+assert.ok(modelHttp.includes('autoRedirect: false'));
+assert.ok(modelHttp.includes('current?.cancel(request)'));
+assert.ok(!modelHttp.includes('skipCertificatesValidation'));
+const assistantStore = await text('entry/src/main/ets/platform/AssistantStore.ets');
+assert.ok(assistantStore.includes('@kit.AssetStoreKit'));
+assert.ok(assistantStore.includes("context.filesDir + '/assistant-v1.json'"));
+assert.ok(!assistantStore.includes('preferences'));
+for (const source of [assistant, modelHttp, assistantStore]) assert.ok(!/console\.(log|info|error)/.test(source), 'No model keys or chats logged');
+const media = await text('entry/src/main/ets/pages/Media.ets');
+assert.ok(media.includes('Navigation(this.navigation.paths)') && media.includes('NavDestination()'), 'Media settings and previews use native page transitions');
+assert.equal((media.match(/this\.screen\s*=(?!=)/g) || []).length, 2, 'Media screen writes belong only in forward/return navigation helpers');
+const mediaFiles = await text('entry/src/main/ets/platform/MediaFiles.ets');
+assert.ok(dashboard.includes("url: 'pages/Media'"));
+assert.ok(media.includes('MediaClient(new ModelHttp())'));
+assert.ok(!media.includes('Web({'));
+assert.ok(mediaFiles.includes('PhotoViewPicker'));
+assert.ok(mediaFiles.includes('DocumentViewPicker'));
+assert.ok(mediaFiles.includes('autoRedirect: false'));
+for (const source of [media, mediaFiles]) assert.ok(!/console\.(log|info|error)/.test(source), 'No image prompts, URLs or credentials logged');
+await mkdir(path.join(root, 'reports'), { recursive: true });
+await writeFile(path.join(root, 'reports/project-check.json'), JSON.stringify({
+  pass: true, checks: ['phone manifest', 'minimal permissions', 'page entry', 'native scanner wiring', 'validated pairing entry', 'native HTTP transport', 'manual redirects', 'Asset Store credentials', 'ArkUI composer and messages', 'no embedded Web page', 'keyboard resize'],
+  nativeCompilation: 'See separate reports/native-build.json and native-build-current.log for compiler evidence.',
+  note: 'Source wiring checks supplement tests; they do not compile ArkTS or validate platform APIs.'
+}, null, 2));
+console.log('Project wiring checks passed (not a native compiler).');
