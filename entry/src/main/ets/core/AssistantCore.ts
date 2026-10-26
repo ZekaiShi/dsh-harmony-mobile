@@ -4,6 +4,7 @@ import { StreamHandle } from './NativeModels';
 import { ProviderCatalog } from './ProviderCatalog';
 import { ChatProtocol, ChatStream } from './ChatProtocol';
 import { ChatAttachment, ChatFeatures, ResolvedAttachment } from './ChatFeatures';
+import { RequestUsage, TokenUsage, UsageEntry } from './TokenUsage';
 
 export class ModelProfile {
   name: string = '我的模型'; base: string = ''; model: string = ''; system: string = '';
@@ -14,23 +15,25 @@ export class ModelProfile {
 export class LocalMessage {
   id: string = ''; role: string = 'user'; text: string = ''; reasoning: string = ''; status: string = 'done';
   attachments: ChatAttachment[] = [];
+  usage?: RequestUsage;
 }
 export class LocalConversation {
   id: string = ''; title: string = '新对话'; updatedAt: number = 0; draft: string = '';
   profile: ModelProfile = new ModelProfile(); messages: LocalMessage[] = [];
   draftAttachments: ChatAttachment[] = [];
+  titleSource: string = 'local'; titleState: string = 'pending'; usageEntries: UsageEntry[] = [];
 }
-export class AssistantData { version: number = 1; profile: ModelProfile = new ModelProfile(); profiles: ModelProfile[] = []; conversations: LocalConversation[] = []; }
+export class AssistantData { version: number = 1; profile: ModelProfile = new ModelProfile(); profiles: ModelProfile[] = []; conversations: LocalConversation[] = []; autoTitle: boolean = true; }
 export class ModelEndpoint { url: string = ''; origin: string = ''; }
 export interface CompletionMessage { role: string; content: string; attachments?: ResolvedAttachment[]; }
-export interface CompletionRequest { model: string; messages: CompletionMessage[]; stream: boolean; }
+export interface CompletionRequest { model: string; messages: CompletionMessage[]; stream: boolean; maxOutputTokens?: number; }
 export interface CompletionDelta { content?: string; reasoning_content?: string; reasoning?: string; }
 export interface CompletionChoice { delta?: CompletionDelta; message?: CompletionDelta; finish_reason?: string | null; }
 export interface CompletionPacket { choices?: CompletionChoice[]; error?: Object; }
 export interface ModelWire { url: string; key: string; body: string; auth?: string; method?: string; }
 export interface ModelCallbacks { data(text: string): void; end(status: number): void; error(): void; }
 export interface ModelTransport { start(wire: ModelWire, callbacks: ModelCallbacks): StreamHandle; }
-export interface ModelEvents { update(text: string, reasoning: string): void; done(reason: string): void; error(message: string): void; }
+export interface ModelEvents { update(text: string, reasoning: string): void; done(reason: string): void; error(message: string): void; usage?(value: RequestUsage): void; }
 
 export class AssistantCore {
   static endpoint(raw: string): ModelEndpoint {
@@ -105,14 +108,21 @@ export class AssistantCore {
     if (data.profiles === undefined) data.profiles = data.profile.base ? [this.profile(data.profile)] : [];
     if (!Array.isArray(data.profiles) || data.profiles.length > 20) throw new Error('服务配置格式不正确。');
     data.profiles = data.profiles.map((profile: ModelProfile) => this.profile(profile));
+    data.autoTitle = data.autoTitle !== false;
     for (const conversation of data.conversations) {
       if (typeof conversation.id !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(conversation.id) || typeof conversation.title !== 'string' || !Number.isFinite(conversation.updatedAt) || !Array.isArray(conversation.messages) || conversation.messages.length > 400 || typeof conversation.draft !== 'string') throw new Error('本机会话数据损坏，原文件已保留。');
       conversation.profile = this.profile(conversation.profile);
       conversation.draftAttachments = ChatFeatures.attachments(conversation.draftAttachments);
+      // Existing titles are preserved; upgrading must never start paid naming requests.
+      conversation.titleSource = ['local','manual','ai'].includes(conversation.titleSource) ? conversation.titleSource : 'manual';
+      conversation.titleState = ['pending','done','failed'].includes(conversation.titleState) ? conversation.titleState : 'failed';
+      if (!Array.isArray(conversation.usageEntries) || conversation.usageEntries.length > 2000) conversation.usageEntries = [];
+      conversation.usageEntries = conversation.usageEntries.filter((e: UsageEntry) => e && typeof e.id === 'string' && e.id.length <= 100 && ['chat','title'].includes(e.kind)).map((e: UsageEntry): UsageEntry => ({ id: e.id, kind: e.kind, model: typeof e.model === 'string' ? e.model.slice(0, 200) : '', usage: TokenUsage.restore(e.usage) }));
       for (const message of conversation.messages) {
         if (!['user','assistant'].includes(message.role) || typeof message.text !== 'string' || typeof message.reasoning !== 'string' || typeof message.id !== 'string') throw new Error('本机消息数据损坏，原文件已保留。');
         if (message.status === 'streaming') message.status = 'interrupted';
         message.attachments = ChatFeatures.attachments(message.attachments);
+        if (message.usage) message.usage = TokenUsage.restore(message.usage);
       }
     }
     return data;
@@ -125,6 +135,12 @@ export class CompletionClient {
     const endpoint = AssistantCore.endpoint(profile.base); const safeKey = AssistantCore.key(key);
     const parser = new SseParser(); const stream = new ChatStream(profile.protocol || 'chat'); let raw = ''; let closed = false; let frames = 0;
     let handle: StreamHandle | undefined;
+    const usage = (): void => {
+      if (!events.usage) return;
+      let attachmentTokens = 0;
+      for (const message of request.messages) for (const attachment of message.attachments || []) attachmentTokens += attachment.kind === 'text' ? ChatFeatures.textTokens(attachment.data) : 1024;
+      events.usage(stream.usage.source === 'reported' ? TokenUsage.restore(stream.usage) : TokenUsage.estimate(request.messages.map((m: CompletionMessage) => m.content).join('\n'), stream.text + stream.reasoning, attachmentTokens));
+    };
     const fail = (message: string): void => { if (closed) return; closed = true; handle?.close(); events.error(message); };
     handle = this.transport.start(ChatProtocol.wire(profile, request, safeKey, endpoint.url), {
       data: (chunk: string): void => {
@@ -133,7 +149,7 @@ export class CompletionClient {
         raw += chunk;
         try {
           for (const frame of parser.push(chunk)) {
-            frames++; if (frame.data.trim()) { stream.packet(frame.data, true); events.update(stream.text, stream.reasoning); }
+            frames++; if (frame.data.trim()) { stream.packet(frame.data, true); usage(); events.update(stream.text, stream.reasoning); }
           }
         } catch (_) { fail('回复数据无法解析，已保留收到的内容。'); }
       },
@@ -142,7 +158,7 @@ export class CompletionClient {
         if (status !== 200) {
           fail(status === 401 || status === 403 ? '模型服务拒绝了授权，请检查 API Key 与模型权限。' : status === 429 ? '模型服务限流或额度不足，请稍后重试并检查账户。' : status >= 300 && status < 400 ? 'API 地址发生重定向，请填写最终地址。' : '模型服务返回 HTTP ' + status + '，请检查地址、模型 ID 或服务状态。'); return;
         }
-        try { if (frames === 0 && raw.trim()) stream.packet(raw, false); events.update(stream.text, stream.reasoning); } catch (_) { fail('模型服务返回了不支持的数据格式。'); return; }
+        try { if (frames === 0 && raw.trim()) stream.packet(raw, false); usage(); events.update(stream.text, stream.reasoning); } catch (_) { fail('模型服务返回了不支持的数据格式。'); return; }
         if (!stream.text && !stream.reasoning) { fail('模型服务没有返回有效回复。'); return; }
         if (frames > 0 && !stream.finished()) { fail('回复连接意外结束，已保留部分内容，可重新生成。'); return; }
         closed = true; events.done(stream.reason || 'stop');

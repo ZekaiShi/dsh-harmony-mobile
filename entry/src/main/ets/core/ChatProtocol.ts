@@ -1,5 +1,6 @@
 import { CompletionRequest, ModelProfile, ModelWire, CompletionPacket, CompletionMessage } from './AssistantCore';
 import { ChatFeatures, ResolvedAttachment } from './ChatFeatures';
+import { RequestUsage, TokenUsage, UsagePacket } from './TokenUsage';
 
 interface NativePart {
   type?: string; text?: string; thinking?: string; thought?: boolean; refusal?: string;
@@ -13,11 +14,12 @@ interface WireMessage { role: string; content: string | NativePart[] | InputPart
 interface NativeContent { role: string; parts: NativePart[]; }
 interface NativeBody {
   model?: string; stream?: boolean; messages?: WireMessage[]; system?: string; max_tokens?: number;
+  max_completion_tokens?: number; max_output_tokens?: number; stream_options?: { include_usage: boolean };
   instructions?: string; input?: WireMessage[]; store?: boolean;
   contents?: NativeContent[]; systemInstruction?: { parts: NativePart[] };
   reasoning_effort?: string; reasoning?: { effort?: string; enabled?: boolean; max_tokens?: number };
   thinking?: { type: string; budget_tokens?: number }; output_config?: { effort: string };
-  generationConfig?: { thinkingConfig: { thinkingBudget: number } };
+  generationConfig?: { thinkingConfig?: { thinkingBudget: number }; maxOutputTokens?: number };
 }
 interface NativePacket {
   type?: string; error?: Object; delta?: { type?: string; text?: string; thinking?: string; stop_reason?: string } | string;
@@ -46,6 +48,13 @@ export class ChatProtocol {
       if (profile.system.trim()) body.systemInstruction = { parts: [{ text: profile.system }] };
     } else body.messages = request.messages.map((item: CompletionMessage): WireMessage => ({ role: item.role, content: this.parts(item, 'chat') }));
     this.reasoning(body, profile);
+    if (protocol === 'chat' && ['openai','deepseek','openrouter','siliconflow','silicon','volcengine','ark','dashscope','moonshot','zhipu','minimax'].includes(profile.provider)) body.stream_options = { include_usage: true };
+    if (request.maxOutputTokens) {
+      if (protocol === 'responses') body.max_output_tokens = request.maxOutputTokens;
+      else if (protocol === 'gemini') { if (!body.generationConfig) body.generationConfig = {}; body.generationConfig.maxOutputTokens = request.maxOutputTokens; }
+      else if (protocol === 'chat' && /^(?:o[134](?:-|$)|gpt-[56](?:[.-]|$))/.test(profile.model)) body.max_completion_tokens = request.maxOutputTokens;
+      else body.max_tokens = request.maxOutputTokens;
+    }
     return { url: base + path, body: JSON.stringify(body), key: key, auth: auth };
   }
   private static text(item: CompletionMessage): string {
@@ -107,9 +116,11 @@ export class ChatProtocol {
 
 export class ChatStream {
   text: string = ''; reasoning: string = ''; reason: string = ''; done: boolean = false;
+  usage: RequestUsage = new RequestUsage();
   constructor(private protocol: string) {}
   packet(source: string, streaming: boolean): void {
     if (source.trim() === '[DONE]') { this.done = true; return; }
+    this.usage = TokenUsage.packet(this.protocol, JSON.parse(source) as UsagePacket, this.usage);
     if (this.done) return;
     if (this.protocol === 'chat') {
       const value = JSON.parse(source) as CompletionPacket;
