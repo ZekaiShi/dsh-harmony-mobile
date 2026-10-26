@@ -12,6 +12,7 @@ export interface WireMessage { source?: WireSource; content?: WireContent[]; }
 export interface WireSource { kind: string; }
 export interface WireChunk { type: string; index?: number; text?: string; delta?: string; }
 export interface WireData {
+  commandId?: string; kind?: string; text?: string;
   turn?: string | number; step?: string | number; stepId?: string;
   message?: WireMessage; chunk?: WireChunk; content?: WireContent[];
   source?: WireSource; callId?: string; name?: string; arguments?: Object; error?: Object;

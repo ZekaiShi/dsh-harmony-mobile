@@ -1,0 +1,18 @@
+{
+  "name": "dsh-harmony-sender",
+  "version": "0.1.0",
+  "description": "Send explicitly selected text from a DSH session to the HarmonyOS native client over the existing paired Desktop bridge",
+  "type": "module",
+  "main": "./src/index.mjs",
+  "exports": { ".": "./src/index.mjs", "./package.json": "./package.json" },
+  "files": ["src", "cordis.patch.yml", "README.md", "LICENSE"],
+  "engines": { "node": ">=22.19.0" },
+  "dsh": { "bundle": { "patch": "./cordis.patch.yml" } },
+  "peerDependencies": { "@deepseek-ai/dsh-commands": "0.2.1-rc.2" },
+  "peerDependenciesMeta": { "@deepseek-ai/dsh-commands": { "optional": true } },
+  "repository": { "type": "git", "url": "git+https://github.com/ZekaiShi/dsh-harmony-mobile.git", "directory": "packages/desktop-sender" },
+  "homepage": "https://github.com/ZekaiShi/dsh-harmony-mobile/tree/main/packages/desktop-sender",
+  "bugs": { "url": "https://github.com/ZekaiShi/dsh-harmony-mobile/issues" },
+  "keywords": ["dsh", "dsh-plugin", "harmonyos", "mobile"],
+  "license": "MIT"
+}

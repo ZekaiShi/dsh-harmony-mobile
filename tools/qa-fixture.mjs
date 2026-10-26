@@ -112,6 +112,9 @@ export async function createFixture() {
   const token = new URL(started.pairingUrl).searchParams.get('token');
   return {
     bridge, base, pairingUrl: `${base}/pair?token=${token}`, calls, answers, observedRequests,
+    senderEvents(events, sessionId = 'qa-session') {
+      for (const event of events) emitRecord(sessions.get(sessionId), event.type, event.data);
+    },
     setReplyDelay(ms) { replyDelay = ms; },
     rename(title, sessionId = 'qa-session') {
       sessions.get(sessionId).projections.values.title = title;

@@ -22,6 +22,7 @@ export class ChatReducer {
   static project(records: WireRecord[]): ChatProjection {
     const result = new ChatProjection();
     const steps = new Map<string, ChatMessage>();
+    const senderCommands = new Set<string>();
     let serial: number = 0;
     let revision: number = 0;
     const step = (data: WireData): ChatMessage => {
@@ -48,6 +49,13 @@ export class ChatReducer {
           message.blocks = this.blocks(data.message?.content || data.content || []).filter((block: ChatBlock) => block.kind === 'text');
           if (message.blocks.length > 0) result.messages.push(message);
         }
+      } else if (type === 'command/run' && data.name === 'harmony-send' && typeof data.commandId === 'string') {
+        senderCommands.add(data.commandId);
+      } else if (type === 'command/done' && data.commandId && senderCommands.has(data.commandId)) {
+        senderCommands.delete(data.commandId);
+        if (data.kind !== 'success' || typeof data.text !== 'string' || !data.text.trim() || data.text.length > 16384) continue;
+        const message = new ChatMessage(); message.id = 'harmony-' + data.commandId; message.version = revision;
+        message.blocks = this.blocks([{ type: 'text', text: data.text }]); result.messages.push(message);
       } else if (type === 'assistant/chunk') {
         const chunk = data.chunk;
         if (chunk === undefined || (chunk.type !== 'text-delta' && chunk.type !== 'reasoning-delta')) continue;
