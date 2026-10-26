@@ -80,11 +80,11 @@ export class ConversationExport {
     }
     lines.push(line); return lines;
   }
-  static pages(doc: ExportDocument, maxHeight: number, measure: ExportMeasure): ExportPage[] {
+  static pages(doc: ExportDocument, maxHeight: number, measure: ExportMeasure, fixedHeight: boolean = false): ExportPage[] {
     if (doc.messages.reduce((n, m) => n + m.text.length, 0) > 200000) throw new Error('图文内容较长，请改用 Markdown 导出，或分条导出。');
     const pages: ExportPage[] = []; let page = new ExportPage(); let y = 68;
     const bottom = maxHeight - 88, left = 64, width = this.WIDTH - 128;
-    const finish = (): void => { page.height = Math.min(maxHeight, Math.max(240, y + 88)); pages.push(page); if (pages.length > 100) throw new Error('图文导出超过 100 页，请改用 Markdown。'); };
+    const finish = (): void => { page.height = fixedHeight ? maxHeight : Math.min(maxHeight, Math.max(240, y + 88)); pages.push(page); if (pages.length > 100) throw new Error('图文导出超过 100 页，请改用 Markdown。'); };
     const next = (): void => { finish(); page = new ExportPage(); y = 68; };
     const space = (height: number): void => { if (y + height > bottom) next(); };
     const line = (value: string, size: number = 28, bold: boolean = false, mono: boolean = false, color: string = '#30302e', indent: number = 0, fill: string = ''): void => {
