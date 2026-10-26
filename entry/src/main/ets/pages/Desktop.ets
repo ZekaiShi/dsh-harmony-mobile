@@ -22,6 +22,9 @@ import { NativeBackButton } from '../components/NativeBackButton';
 import { NativeCircleStyle } from '../components/NativeCircleStyle';
 import { BackNavigation } from '../core/BackNavigation';
 import { PageBackdrop } from '../components/PageBackdrop';
+import { ConversationExport } from '../core/ConversationExport';
+import { ConversationFiles } from '../platform/ConversationFiles';
+import { ChatFeatures } from '../core/ChatFeatures';
 import { HoldingMotion } from '../platform/HoldingMotion';
 import { ComposerToolbar } from '../components/ComposerToolbar';
 import { SessionDrafts, desktopSessionDrafts } from '../core/SessionDrafts';
@@ -47,6 +50,8 @@ struct Desktop {
   @State private sessionId: string = '';
   @State private sessionTitle: string = '';
   @State private messages: ChatMessage[] = [];
+  @State private exporting: boolean = false;
+  private historyHasMore: boolean = true;
   @State private running: boolean = false;
   @State private sending: boolean = false;
   @State private historyLoading: boolean = false;
@@ -270,6 +275,7 @@ struct Desktop {
     try {
       const values = await Promise.all([this.client.rpc('session.history', { sessionId: this.sessionId, maxMessages: 100 }), this.client.rpc('interaction.pending', { sessionId: this.sessionId })]);
       if (epoch !== this.epoch) return;
+      this.historyHasMore = values[0].hasMore === true;
       if (!this.streamOnline || revision === this.revision) { this.sessionTitle = SessionPresentation.projectedTitle(values[0].projections) || this.sessionTitle; this.records = values[0].events || []; this.paintChat(); }
       this.applyPending(values[1]); this.error = '';
     } catch (error) { if (epoch === this.epoch) this.fail(error as Error); }
@@ -332,6 +338,27 @@ struct Desktop {
   private copyText(text: string): void {
     pasteboard.getSystemPasteboard().setData(pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, text))
       .then(() => { this.toast('已复制'); }).catch(() => { this.toast('复制失败，请长按文字复制'); });
+  }
+  private exportMenu(): void {
+    Keyboard.dismiss(this.getUIContext());
+    this.getUIContext().showActionSheet({ title: '导出电脑会话', message: '将向电脑读取最多 1000 条历史；若电脑仍有较早消息，会在文件内标记“部分历史”。只导出对话正文，不包含隐藏思考和工具内部参数。',
+      sheets: [{ title: '长图 PNG', action: () => { void this.exportConversation('png'); } }, { title: 'Markdown 文件', action: () => { void this.exportConversation('md'); } }, { title: 'PDF 文档', action: () => { void this.exportConversation('pdf'); } }] });
+  }
+  private async exportConversation(format: string): Promise<void> {
+    if (this.exporting || !this.sessionId) return; this.exporting = true;
+    const epoch = this.epoch, session = this.sessionId, title = this.sessionTitle;
+    try {
+      const history = await this.client.rpc('session.history', { sessionId: session, maxMessages: 1000 });
+      if (epoch !== this.epoch || session !== this.sessionId) return;
+      const document = ConversationExport.desktop(SessionPresentation.projectedTitle(history.projections) || title, ChatReducer.project(history.events || []).messages, history.hasMore === true);
+      const count = await ConversationFiles.export(this.getUIContext().getHostContext() as common.Context, document, format);
+      if (count) this.toast('已导出 ' + count + ' 个文件' + (document.partial ? '（部分历史）' : ''));
+    } catch (error) { this.toast((error as Error).message || '电脑会话导出失败'); }
+    finally { this.exporting = false; }
+  }
+  private usageDetails(): void {
+    const text = this.messages.map((message: ChatMessage) => message.blocks.filter((block: ChatBlock) => block.kind === 'text').map((block: ChatBlock) => block.text).join('\n')).join('\n');
+    this.getUIContext().showAlertDialog({ title: '电脑会话 Token · 估算', message: '当前已加载正文约 ' + ChatFeatures.textTokens(text) + ' token。\n\n当前连接未取得服务端精确用量；这里不含完整系统指令、隐藏思考和工具上下文，不能当作账单或实际上下文窗口占用。', primaryButton: { value: '知道了', action: () => {} } });
   }
   private selectAnswer(label: string): void {
     if (this.questionBusy) return;
@@ -564,6 +591,12 @@ struct Desktop {
   @Builder
   private chatPage() {
     Column({ space: 0 }) {
+      Row({ space: 12 }) {
+        Button('复制会话', { type: ButtonType.Normal }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).id('dsh-copy-conversation').onClick(() => this.copyText(ConversationExport.markdown(ConversationExport.desktop(this.sessionTitle, this.messages, this.historyHasMore))))
+        Button('Token', { type: ButtonType.Normal }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).id('dsh-usage').onClick(() => this.usageDetails())
+        Button(this.exporting ? '导出中…' : '导出', { type: ButtonType.Normal }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).id('dsh-export').enabled(!this.exporting && this.messages.length > 0).onClick(() => this.exportMenu())
+        Blank()
+      }.width('100%').padding({ left: 18, right: 18 })
       this.errorBanner()
       List({ scroller: this.scroller, space: 26 }) {
         if (this.messages.length === 0) {

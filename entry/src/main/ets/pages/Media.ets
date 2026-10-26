@@ -18,6 +18,8 @@ import { BackNavigation } from '../core/BackNavigation';
 import { Keyboard } from '../platform/Keyboard';
 import { PageNavigation } from '../platform/PageNavigation';
 import { PageBackdrop } from '../components/PageBackdrop';
+import { ConversationExport } from '../core/ConversationExport';
+import { ConversationFiles } from '../platform/ConversationFiles';
 
 @Entry
 @Component
@@ -36,6 +38,7 @@ struct Media {
   @State private activeText: string = '';
   @State private activePrompt: string = '';
   @State private activeStatus: string = '';
+  @State private exporting: boolean = false;
   @State private activeError: string = '';
   @State private outputs: ImageAsset[] = [];
   @State private preview: ImageAsset | undefined = undefined;
@@ -193,6 +196,17 @@ struct Media {
   private useImage(asset: ImageAsset, purpose: string): void { this.stop(); this.reference = asset; this.purpose = purpose; this.returnTo('main'); this.prompt = ''; this.save(); }
   private async export(asset: ImageAsset): Promise<void> { try { if (await this.files.export(this.getUIContext().getHostContext() as common.Context, asset)) this.toast('图片已导出'); } catch (_) { this.toast('图片未能导出，请重试'); } }
   private copy(text: string): void { pasteboard.getSystemPasteboard().setData(pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, text)).then(() => this.toast('已复制')).catch(() => this.toast('复制失败')); }
+  private exportMenu(): void {
+    this.getUIContext().showActionSheet({ title: '导出图像问答 / 作品', message: 'PNG / PDF 包含本机参考图与生成图；Markdown 保留文字，图片仅列出名称。导出在本机完成。', sheets: [
+      { title: '长图 PNG', action: () => { void this.exportRecord('png'); } }, { title: 'Markdown 文件', action: () => { void this.exportRecord('md'); } }, { title: 'PDF 文档', action: () => { void this.exportRecord('pdf'); } }
+    ] });
+  }
+  private async exportRecord(format: string): Promise<void> {
+    if (this.exporting) return; this.exporting = true;
+    try { const count = await ConversationFiles.export(this.getUIContext().getHostContext() as common.Context, ConversationExport.media(this.active), format); if (count) this.toast('已导出 ' + count + ' 个文件'); }
+    catch (error) { this.toast((error as Error).message || '导出未完成'); }
+    finally { this.exporting = false; }
+  }
   private remove(record: MediaRecord): void {
     this.getUIContext().showAlertDialog({ title: '删除图像记录', message: '删除该记录及未被其他记录或草稿引用的本机图片？已导出的文件不受影响。',
       primaryButton: { value: '取消', action: () => {} }, secondaryButton: { value: '删除', action: () => {
@@ -325,6 +339,7 @@ struct Media {
         if (this.activeText) MarkdownView({ content: this.activeText })
         if (this.activeError) Text(this.activeError).fontSize(13).lineHeight(22).fontColor($r('app.color.danger')).width('100%')
         if (this.activeStatus !== 'pending') {
+          Button(this.exporting ? '导出中…' : '导出对话 / 作品', { type: ButtonType.Normal }).fontSize(12).height(40).width('100%').borderRadius(20).backgroundColor($r('app.color.accent_soft')).fontColor($r('app.color.text_primary')).id('media-export-record').enabled(!this.exporting).onClick(() => this.exportMenu())
           Row({ space: 8 }) {
             Button('使用描述', { type: ButtonType.Normal }).fontSize(12).height(40).layoutWeight(1).borderRadius(20).backgroundColor($r('app.color.accent_soft')).fontColor($r('app.color.text_primary')).id('media-reuse').onClick(() => { this.prompt = this.active.prompt; this.returnTo('main'); this.save(); })
             if (this.activeText) Button('复制文字', { type: ButtonType.Normal }).fontSize(12).height(40).layoutWeight(1).borderRadius(20).backgroundColor($r('app.color.accent_soft')).fontColor($r('app.color.text_primary')).onClick(() => this.copy(this.activeText))

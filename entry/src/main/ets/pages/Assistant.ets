@@ -25,6 +25,8 @@ import { ComposerToolbar } from '../components/ComposerToolbar';
 import { PageBackdrop } from '../components/PageBackdrop';
 import { RequestUsage, TokenUsage, UsageEntry } from '../core/TokenUsage';
 import { ConversationTitle } from '../core/ConversationTitle';
+import { ConversationExport } from '../core/ConversationExport';
+import { ConversationFiles } from '../platform/ConversationFiles';
 
 @Entry
 @Component
@@ -71,6 +73,7 @@ struct Assistant {
   @State private naming: boolean = false;
   @State private automaticTitles: boolean = true;
   @State private editUsage: boolean = false;
+  @State private exporting: boolean = false;
   private titleTask: StreamHandle | undefined;
   private titleEpoch: number = 0;
   private titleConversation: LocalConversation | undefined;
@@ -303,6 +306,19 @@ struct Assistant {
     Keyboard.dismiss(this.getUIContext());
     this.getUIContext().showAlertDialog({ title: '会话 Token 统计', message: TokenUsage.summary(this.active.usageEntries), primaryButton: { value: '知道了', action: () => {} } });
   }
+  private exportMenu(): void {
+    Keyboard.dismiss(this.getUIContext());
+    this.getUIContext().showActionSheet({ title: '导出对话', message: '仅导出正文及附件信息，不包含隐藏思考、工具参数和系统指令。长图包含本机图片，过长会分段；PDF 为分页图文版；Markdown 保留格式，附件仅列出名称。',
+      sheets: [{ title: '长图 PNG', action: () => { void this.exportConversation('png'); } }, { title: 'Markdown 文件', action: () => { void this.exportConversation('md'); } }, { title: 'PDF 文档', action: () => { void this.exportConversation('pdf'); } }] });
+  }
+  private async exportConversation(format: string): Promise<void> {
+    if (this.exporting) return; this.exporting = true;
+    try {
+      const document = ConversationExport.assistant(this.active), count = await ConversationFiles.export(this.getUIContext().getHostContext() as common.Context, document, format);
+      if (count) this.toast('已导出 ' + count + ' 个文件');
+    } catch (error) { this.toast((error as Error).message || '导出未完成，请重试'); }
+    finally { this.exporting = false; }
+  }
   private back(): void {
     Keyboard.dismiss(this.getUIContext());
     if (this.screen === 'settings' && this.busy) return;
@@ -531,6 +547,7 @@ struct Assistant {
         Button('重命名', { type: ButtonType.Normal }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).onClick(() => { this.titleInput = this.active.title; this.rename = !this.rename; })
         Button('复制会话', { type: ButtonType.Normal }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).id('assistant-copy-conversation').onClick(() => this.copy(AssistantCore.transcript(this.active)))
         Button('Token', { type: ButtonType.Normal }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).id('assistant-usage').onClick(() => this.usageDetails())
+        Button(this.exporting ? '导出中…' : '导出', { type: ButtonType.Normal }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).id('assistant-export').enabled(!this.exporting && this.active.messages.length > 0).onClick(() => this.exportMenu())
         Blank()
         Text(this.naming ? '命名中…' : '本机会话').fontSize(10).fontColor($r('app.color.text_secondary'))
       }.padding({ left: 15, right: 23 }).width('100%')
