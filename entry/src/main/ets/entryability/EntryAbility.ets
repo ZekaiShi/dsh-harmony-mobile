@@ -5,6 +5,7 @@ import { HarmonyExperience } from '../platform/HarmonyExperience';
 
 export default class EntryAbility extends UIAbility {
   private mainWindow: window.Window | undefined;
+  private layoutInitialized: boolean = false;
   private themeColor(name: string): string {
     return '#' + (this.context.resourceManager.getColorByNameSync(name) >>> 0).toString(16).padStart(8, '0');
   }
@@ -14,8 +15,11 @@ export default class EntryAbility extends UIAbility {
       const background = this.themeColor('page_bg'), foreground = this.themeColor('text_primary');
       AppStorage.setOrCreate('chromeTextColor', foreground);
       this.mainWindow.setWindowBackgroundColor(background);
-      await this.mainWindow.setWindowLayoutFullScreen(true);
-      await this.mainWindow.setWindowSystemBarProperties({ statusBarColor: '#00000000', navigationBarColor: '#00000000',
+      // Let the system fit interactive content below/above its bars. Matching
+      // bar colours keep one canvas without relying on fullscreen safe-area
+      // negotiation, which can shift a visible destination after resume.
+      if (!this.layoutInitialized) { this.layoutInitialized = true; await this.mainWindow.setWindowLayoutFullScreen(false); }
+      await this.mainWindow.setWindowSystemBarProperties({ statusBarColor: background, navigationBarColor: background,
         statusBarContentColor: foreground, navigationBarContentColor: foreground });
     } catch (_) {}
   }
@@ -23,6 +27,7 @@ export default class EntryAbility extends UIAbility {
     HarmonyExperience.initialize(this.context);
     try {
       this.mainWindow = windowStage.getMainWindowSync();
+      this.layoutInitialized = false;
       // Finish the window setup before displaying the first application frame.
       this.syncWindowColors().then(() => {
         windowStage.loadContent('pages/Index', (error) => {

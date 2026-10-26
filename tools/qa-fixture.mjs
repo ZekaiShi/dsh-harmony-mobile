@@ -146,6 +146,19 @@ export async function createFixture() {
       }
       for (const client of clients) if (client.sessionId === sessionId) client.socket.close();
     },
+    foldingSample(sessionId = 'qa-session') {
+      const session = sessions.get(sessionId); session.records = [];
+      emitRecord(session,'assistant/message',{turn:7,step:0,message:{content:[{type:'text',text:'正常正文保留在调用之外。'}]}});
+      emitRecord(session,'assistant/message',{turn:7,step:1,message:{content:[{type:'reasoning',text:'QA-HIDDEN-REASONING'}]}});
+      for (const [index, name] of ['spawn_agent','custom_unknown_tool','pwsh','read_file','web_fetch'].entries()) {
+        const callId = 'fold-'+index;
+        emitRecord(session,'tool/call',{turn:7,step:index+2,callId,name,arguments:JSON.stringify(index===2?{command:'QA-HIDDEN-COMMAND'}:{path:'/qa/sample.txt'})});
+        emitRecord(session,'tool/result',{turn:7,step:99,message:{toolCallId:callId,isError:index===3,content:[{type:'text',text:'QA-HIDDEN-RESULT-'+index}]}});
+      }
+      emitRecord(session,'turn/end',{});
+      emitRecord(session,'assistant/message',{turn:7,step:100,message:{content:[{type:'text',text:'最终回复仍然直接显示。'}]}});
+      for (const client of clients) if (client.sessionId === sessionId) client.socket.close();
+    },
     completeActivity(sessionId = 'qa-session') {
       emitRecord(sessions.get(sessionId),'tool/result',{stepId:'activity-steps',message:{content:[{type:'tool-result',toolCallId:'shell',content:[{type:'text',text:'BUILD SUCCESSFUL'}]}]}});
       emitRecord(sessions.get(sessionId),'turn/end',{});

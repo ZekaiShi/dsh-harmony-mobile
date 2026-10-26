@@ -8,7 +8,7 @@ export interface WireContent {
   isError?: boolean;
   content?: WireContent[];
 }
-export interface WireMessage { source?: WireSource; content?: WireContent[]; }
+export interface WireMessage { source?: WireSource; content?: WireContent[]; toolCallId?: string; isError?: boolean; name?: string; }
 export interface WireSource { kind: string; }
 export interface WireChunk { type: string; index?: number; text?: string; delta?: string; }
 export interface WireData {
@@ -58,6 +58,7 @@ export interface CredentialStore {
 export interface PairOutcome { pinRequired: boolean; migrationUrl: string; }
 export interface SnapshotFrame { records?: WireRecord[]; projections?: Projections; }
 export class ChatBlock {
+  children: ChatBlock[] = [];
   kind: string = 'text'; text: string = ''; name: string = ''; id: string = ''; status: string = ''; key: string = '';
   category: string = 'tool'; summary: string = '';
 }

@@ -2,14 +2,38 @@ import { common } from '@kit.AbilityKit';
 import { fileIo } from '@kit.CoreFileKit';
 import { image } from '@kit.ImageKit';
 import { util } from '@kit.ArkTS';
-import { LengthMetricsUnit } from '@kit.ArkUI';
+import { LengthMetricsUnit, window } from '@kit.ArkUI';
 import { ConversationFiles } from '../platform/ConversationFiles';
 import { ExportDocument, ExportMessage } from '../core/ConversationExport';
+import { AssistantCore, AssistantData, LocalMessage, ModelProfile } from '../core/AssistantCore';
+import { AssistantStore } from '../platform/AssistantStore';
+import { MediaData, MediaProfile, MediaRecord } from '../core/MediaCore';
+import { MediaFiles } from '../platform/MediaFiles';
 
 @Entry
 @Component
 struct ExportSmoke {
   @State result: string = '仅包含虚构测试资料';
+  @State safeTop: number = 0;
+  aboutToAppear(): void {
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    window.getLastWindow(context).then((current: window.Window) => { this.safeTop = current.getWindowProperties().windowRect.top + current.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM).topRect.height; });
+  }
+  private seedMenus(): void {
+    const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const store = new AssistantStore(); store.load(context);
+    const data = new AssistantData(), profile = new ModelProfile();
+    profile.base = 'https://example.invalid/v1'; profile.model = 'qa-offline'; data.profile = profile;
+    const conversation = AssistantCore.create('qa-menu', profile, Date.now()); conversation.title = '菜单隔离验收'; conversation.titleSource = 'manual'; conversation.titleState = 'done';
+    const user = new LocalMessage(); user.id = 'qa-user'; user.text = '仅用于菜单验收。';
+    const reply = new LocalMessage(); reply.id = 'qa-reply'; reply.role = 'assistant'; reply.text = '这是一条虚构回复，没有模型请求。';
+    conversation.messages = [user, reply]; data.conversations = [conversation]; store.save(data);
+    const files = new MediaFiles(); files.load(context);
+    const media = new MediaData(), record = new MediaRecord(), mediaProfile = new MediaProfile();
+    mediaProfile.base = 'https://example.invalid/v1'; mediaProfile.model = 'qa-image'; record.profile = mediaProfile;
+    record.id = 'qa-menu'; record.createdAt = Date.now(); record.status = 'done'; record.prompt = '虚构图像问答'; record.text = '仅用于菜单验收的文字，不请求服务。';
+    media.history = [record]; files.save(media); this.result = '菜单测试数据已准备';
+  }
   private async generate(): Promise<void> {
     this.result = '正在生成';
     const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
@@ -52,7 +76,9 @@ struct ExportSmoke {
     Column({ space: 24 }) {
       Text('DSH 导出隔离验收').fontSize(24)
       Text(this.result).id('qa-result')
+      Text('安全区像素：' + this.safeTop).id('qa-safe-top')
       Button('生成虚构导出').id('qa-generate').onClick(() => { void this.generate(); })
+      Button('准备菜单测试数据').id('qa-seed-menu').onClick(() => { this.seedMenus(); })
       Button('打开主页').id('qa-home').onClick(() => { this.getUIContext().getRouter().replaceUrl({ url: 'pages/Index' }); })
     }.width('100%').height('100%').justifyContent(FlexAlign.Center).padding(24).backgroundColor('#faf9f5')
   }

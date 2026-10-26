@@ -34,5 +34,5 @@ struct Experience {
       }.padding(26).width('100%').alignItems(HorizontalAlign.Start)
     }.width('100%').height('100%').scrollBar(BarState.Off)
   }
-  build() { Stack() { PageBackdrop(); Navigation() { this.body() }.title({ builder: this.heading, height: 60 }, HarmonyExperience.titleOptions()).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).titleMode(NavigationTitleMode.Mini).hideBackButton(true).hideToolBar(true).mode(NavigationMode.Stack).width('100%').height('100%').backgroundColor($r('app.color.page_bg')) }.width('100%').height('100%').backgroundColor($r('app.color.page_bg')) }
+  build() { Stack() { PageBackdrop(); Navigation() { this.body() }.title({ builder: this.heading, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).titleMode(NavigationTitleMode.Mini).hideBackButton(true).hideToolBar(true).mode(NavigationMode.Stack).width('100%').height('100%').backgroundColor($r('app.color.page_bg')) }.width('100%').height('100%').backgroundColor($r('app.color.page_bg')) }
 }

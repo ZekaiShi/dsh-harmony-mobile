@@ -32,12 +32,12 @@ try{
  await input('assistant-draft','这是第二次提问');await click('assistant-send');await wait('重新生成');await pause(700);assert.equal(model.requests.length,3,'Automatic title runs once');
  await click('assistant-usage');const usage=await wait('会话 Token 统计');const message=usage.find(n=>n.text.includes('服务端已报告：'))?.text||'';assert.match(message,/总计：324/);assert.match(message,/命名请求：1 次/);await shot('token-usage');await click('知道了');
  report.checked.push('First complete reply automatically names once','Follow-up does not trigger a second title call','Reported usage includes 2 replies and 1 title (324 synthetic tokens)');
- await click('assistant-export');await wait('导出对话');await shot('export-menu');run('shell','uitest','uiInput','keyEvent','Back');await pause(400);
+ await click('assistant-export');await wait('export-png');await shot('export-menu');run('shell','uitest','uiInput','keyEvent','Back');await pause(400);
  await click('assistant-back');await click('assistant-back');await wait('open-desktop');await click('open-desktop');await click('粘贴连接链接');
  const manual=(await layout()).find(n=>n.type==='TextArea');run('shell','uitest','uiInput','inputText',...point(manual),bridge.pairingUrl.replace('127.0.0.1','10.0.2.2'));run('shell','uitest','uiInput','keyEvent','Back');await pause(400);await click('打开连接');await wait('二维码连接验收');await click('二维码连接验收');
  bridge.senderEvents([{type:'command/run',data:{name:'harmony-send',commandId:'qa-native-sender'}},{type:'command/done',data:{commandId:'qa-native-sender',kind:'success',text:'鸿蒙发送端：虚构文字已显示。'}}]);
  await wait('鸿蒙发送端：虚构文字已显示。');await shot('sender-chat');report.checked.push('Original Desktop QR pairs in the native QA client','Sender command result crosses original bridge SSE and renders as native text');
- await click('dsh-export');await wait('导出电脑会话');await shot('desktop-export-menu');run('shell','uitest','uiInput','keyEvent','Back');await pause(350);
+ await click('dsh-export');await wait('export-png');await shot('desktop-export-menu');run('shell','uitest','uiInput','keyEvent','Back');await pause(350);
  report.pass=true;
 }catch(error){report.error=error.message;await shot('release-qa-failure').catch(()=>{});process.exitCode=1;}
 finally{report.requests=model.requests.map(r=>({model:r.body.model,messages:r.body.messages?.map(m=>({role:m.role,characters:m.content?.length})),isTitle:r.body.messages?.[0]?.content?.includes('只负责给对话命名')}));await mkdir(path.join(root,'reports'),{recursive:true});await writeFile(path.join(root,'reports/release-qa.json'),JSON.stringify(report,null,2));await model.close();await bridge.close();}

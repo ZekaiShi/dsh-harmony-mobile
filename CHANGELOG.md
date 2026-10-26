@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.1 — navigation and activity fixes
+
+- Let the system fit content around its bars, match bar colours to the page, and explicitly preserve the Navigation/NavDestination safe area on foreground return.
+- Use the same compact native three-choice export menu in chat, Desktop and image records.
+- Default consecutive reasoning/tool/Agent calls to one disclosure, including unknown tools; keep normal answers directly visible.
+- Match both legacy nested and first-class tool results across steps, parse JSON-string tool arguments, retain completion/error states and stop history refresh from moving the page while reading details.
+
 ## 0.9.0 — development preview
 
 - Use one theme canvas behind native navigation and transparent system bars; remove full-header material strips while retaining native circular button materials.

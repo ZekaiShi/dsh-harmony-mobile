@@ -6,6 +6,7 @@ import { pasteboard } from '@kit.BasicServicesKit';
 import { ConnectionPolicy, RecentConnection, RemoteTarget } from '../core/ConnectionPolicy';
 import { DshClient } from '../core/DshClient';
 import { ChatReducer } from '../core/ChatReducer';
+import { ChatActivity } from '../core/ChatActivity';
 import { MessageLink } from '../core/MessageLink';
 import { ToolPresentation } from '../core/ToolPresentation';
 import { MarkdownView } from '../components/MarkdownView';
@@ -24,6 +25,7 @@ import { BackNavigation } from '../core/BackNavigation';
 import { PageBackdrop } from '../components/PageBackdrop';
 import { ConversationExport } from '../core/ConversationExport';
 import { ConversationFiles } from '../platform/ConversationFiles';
+import { ExportOptions } from '../components/ExportOptions';
 import { ChatFeatures } from '../core/ChatFeatures';
 import { HoldingMotion } from '../platform/HoldingMotion';
 import { ComposerToolbar } from '../components/ComposerToolbar';
@@ -50,6 +52,7 @@ struct Desktop {
   @State private sessionId: string = '';
   @State private sessionTitle: string = '';
   @State private messages: ChatMessage[] = [];
+  @State private timeline: ChatMessage[] = [];
   @State private exporting: boolean = false;
   private historyHasMore: boolean = true;
   @State private running: boolean = false;
@@ -174,7 +177,7 @@ struct Desktop {
     this.connectionEpoch++; this.stopLive(); this.client.close(); this.screen = 'devices';
     this.paths.clear(true);
     this.busy = false; this.pin = ''; this.manual = false; this.manualLink = ''; this.error = ''; this.sessionId = '';
-    this.messages = []; this.draft = ''; this.pending = null; this.optimisticText = ''; this.running = false; this.sending = false; this.questionBusy = false;
+    this.messages = []; this.timeline = []; this.draft = ''; this.pending = null; this.optimisticText = ''; this.running = false; this.sending = false; this.questionBusy = false;
   }
   private async forget(record: RecentConnection): Promise<void> {
     this.drafts.forget(record.origin);
@@ -217,7 +220,7 @@ struct Desktop {
   private openSession(item: ServerItem): void {
     this.drafts.save(this.client.origin, this.sessionId, this.draft);
     this.stopLive(); this.sessionId = item.sessionId || ''; this.sessionTitle = SessionPresentation.title(item);
-    this.error = ''; this.draft = this.drafts.read(this.client.origin, this.sessionId); this.records = []; this.messages = []; this.pending = null; this.sending = false; this.questionBusy = false;
+    this.error = ''; this.draft = this.drafts.read(this.client.origin, this.sessionId); this.records = []; this.messages = []; this.timeline = []; this.pending = null; this.sending = false; this.questionBusy = false;
     this.optimisticText = ''; this.expanded = []; this.followBottom = true; this.running = item.running || false;
     this.historyLoading = true; this.navigate('chat'); this.openStream(); void this.loadHistory();
   }
@@ -296,7 +299,7 @@ struct Desktop {
       const message = new ChatMessage(); message.id = 'optimistic'; message.role = 'user'; const block = new ChatBlock(); block.text = this.optimisticText;
       message.blocks = [block]; projection.messages.push(message);
     } else this.optimisticText = '';
-    this.messages = projection.messages; this.running = projection.running || this.sending;
+    this.messages = projection.messages; this.timeline = ChatActivity.project(projection.messages); this.running = projection.running || this.sending;
     if (this.followBottom) {
       clearTimeout(this.scrollTimer); this.scrollTimer = setTimeout(() => { try { this.scroller.scrollEdge(Edge.Bottom); } catch (_) {} }, 50);
     }
@@ -339,10 +342,8 @@ struct Desktop {
     pasteboard.getSystemPasteboard().setData(pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, text))
       .then(() => { this.toast('已复制'); }).catch(() => { this.toast('复制失败，请长按文字复制'); });
   }
-  private exportMenu(): void {
-    Keyboard.dismiss(this.getUIContext());
-    this.getUIContext().showActionSheet({ title: '导出电脑会话', message: '将向电脑读取最多 1000 条历史；若电脑仍有较早消息，会在文件内标记“部分历史”。只导出对话正文，不包含隐藏思考和工具内部参数。',
-      sheets: [{ title: '长图 PNG', action: () => { void this.exportConversation('png'); } }, { title: 'Markdown 文件', action: () => { void this.exportConversation('md'); } }, { title: 'PDF 文档', action: () => { void this.exportConversation('pdf'); } }] });
+  @Builder private exportOptions() {
+    ExportOptions((format: string): void => { Keyboard.dismiss(this.getUIContext()); void this.exportConversation(format); })
   }
   private async exportConversation(format: string): Promise<void> {
     if (this.exporting || !this.sessionId) return; this.exporting = true;
@@ -530,9 +531,30 @@ struct Desktop {
     if (category === 'web') return $r('sys.symbol.worldclock');
     return $r('sys.symbol.wrench_and_screwdriver');
   }
+  private toggleActivity(key: string): void {
+    // Reading details is deliberate navigation: a background history refresh
+    // must not pull the header away from the user's next tap.
+    this.followBottom = false; clearTimeout(this.scrollTimer); this.scrollTimer = -1;
+    this.expanded = this.expanded.includes(key) ? this.expanded.filter((item: string) => item !== key) : this.expanded.concat([key]);
+  }
   @Builder
   private messageBlock(block: ChatBlock, key: string) {
     if (block.kind === 'text') this.formattedText(block.text)
+    else if (block.kind === 'activity') {
+      Column({ space: 0 }) {
+        Row({ space: 9 }) {
+          SymbolGlyph($r('sys.symbol.wrench_and_screwdriver')).fontSize(16).fontColor([$r('app.color.text_secondary')])
+          Text(ChatActivity.label(block)).fontSize(13).fontColor($r('app.color.text_secondary')).layoutWeight(1)
+          if (block.status === 'running') LoadingProgress().width(12).height(12).color($r('app.color.text_secondary'))
+          if (block.status === 'error') Text('有失败').fontSize(11).fontColor($r('app.color.danger'))
+          SymbolGlyph($r('sys.symbol.chevron_right')).fontSize(12).fontColor([$r('app.color.text_secondary')]).rotate({ angle: this.expanded.includes(key) ? 90 : 0 }).opacity(0.6)
+        }.width('100%').height(36).id('activity-toggle-' + key).accessibilityText(ChatActivity.label(block) + (this.expanded.includes(key) ? '，收起调用' : '，展开调用'))
+          .onClick(() => this.toggleActivity(key))
+        if (this.expanded.includes(key)) {
+          ForEach(block.children, (child: ChatBlock) => { this.messageBlock(child, child.key) }, (child: ChatBlock) => child.key)
+        }
+      }.width('100%')
+    }
     else {
       Column({ space: 0 }) {
         Row({ space: 9 }) {
@@ -549,8 +571,8 @@ struct Desktop {
           } else Blank()
           if (block.status === 'running') LoadingProgress().width(12).height(12).color($r('app.color.text_secondary'))
           SymbolGlyph($r('sys.symbol.chevron_right')).fontSize(12).fontColor([$r('app.color.text_secondary')]).rotate({ angle: this.expanded.includes(key) ? 90 : 0 }).opacity(0.6)
-        }.width('100%').height(36).accessibilityText((block.kind === 'reasoning' ? '思考过程' : block.name) + (this.expanded.includes(key) ? '，收起详情' : '，展开详情'))
-          .onClick(() => { this.expanded = this.expanded.includes(key) ? this.expanded.filter((item: string) => item !== key) : this.expanded.concat([key]); })
+        }.width('100%').height(36).id('activity-toggle-' + key).accessibilityText((block.kind === 'reasoning' ? '思考过程' : block.name) + (this.expanded.includes(key) ? '，收起详情' : '，展开详情'))
+          .onClick(() => this.toggleActivity(key))
         if (this.expanded.includes(key)) {
           Text(block.text || '暂无详细内容').fontSize(12).fontFamily(block.kind === 'tool' ? 'monospace' : 'HarmonyOS Sans').lineHeight(21)
             .fontColor($r('app.color.text_secondary')).copyOption(CopyOptions.LocalDevice).width('100%').padding({ left: 15, top: 5, bottom: 12 })
@@ -594,7 +616,7 @@ struct Desktop {
       Row({ space: 12 }) {
         Button('复制会话', { type: ButtonType.Normal }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).id('dsh-copy-conversation').onClick(() => this.copyText(ConversationExport.markdown(ConversationExport.desktop(this.sessionTitle, this.messages, this.historyHasMore))))
         Button('Token', { type: ButtonType.Normal }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).id('dsh-usage').onClick(() => this.usageDetails())
-        Button(this.exporting ? '导出中…' : '导出', { type: ButtonType.Normal }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).id('dsh-export').enabled(!this.exporting && this.messages.length > 0).onClick(() => this.exportMenu())
+        Button(this.exporting ? '导出中…' : '导出', { type: ButtonType.Normal }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).id('dsh-export').enabled(!this.exporting && this.messages.length > 0).bindMenu(this.exportOptions)
         Blank()
       }.width('100%').padding({ left: 18, right: 18 })
       this.errorBanner()
@@ -608,13 +630,13 @@ struct Desktop {
             }.padding({ top: 100, bottom: 40 }).width('100%')
           }
         }
-        ForEach(this.messages, (message: ChatMessage) => {
+        ForEach(this.timeline, (message: ChatMessage) => {
           ListItem() {
             Column({ space: 0 }) {
               Column({ space: message.role === 'user' ? 8 : 2 }) {
                 ForEach(message.blocks, (block: ChatBlock, index: number) => {
                   if (message.role === 'user') Text(block.text).fontSize(16).lineHeight(25).fontColor($r('app.color.text_primary')).copyOption(CopyOptions.LocalDevice)
-                  else this.messageBlock(block, message.id + ':' + index)
+                  else this.messageBlock(block, block.key || message.id + ':' + index)
                 },
                   (block: ChatBlock, index: number) => block.kind + ':' + index)
               }.padding(message.role === 'user' ? 14 : 0).constraintSize({ maxWidth: message.role === 'user' ? '90%' : '100%' })
@@ -655,14 +677,14 @@ struct Desktop {
   @Builder private destination(name: string) {
     if (name === 'pin') {
       NavDestination() { this.pinPage() }
-        .title({ builder: this.pinHeader, height: 60 }, HarmonyExperience.titleOptions()).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => this.back())
+        .title({ builder: this.pinHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => this.back())
     } else if (name === 'sessions') {
       NavDestination() { this.sessionList() }
-        .title({ builder: this.sessionsHeader, height: 60 }, HarmonyExperience.titleOptions()).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => this.back())
+        .title({ builder: this.sessionsHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => this.back())
         .onShown(() => { if (this.screen === 'chat') this.showSessions(); })
     } else if (name === 'chat') {
       NavDestination() { this.chatPage() }
-        .title({ builder: this.chatHeader, height: 60 }, HarmonyExperience.titleOptions()).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => this.back())
+        .title({ builder: this.chatHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => this.back())
     }
   }
   build() {
@@ -673,7 +695,7 @@ struct Desktop {
       .onNavBarStateChange((visible: boolean) => { if (visible && this.paths.size() === 0 && this.screen !== 'devices') this.showDevices(); })
       .titleMode(NavigationTitleMode.Mini).hideBackButton(true).hideToolBar(true).mode(NavigationMode.Stack)
       .width('100%').height('100%').backgroundColor($r('app.color.page_bg'))
-      .systemBarStyle({ statusBarContentColor: this.chromeTextColor })
+      .ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor })
     }.width('100%').height('100%').backgroundColor($r('app.color.page_bg'))
   }
 }

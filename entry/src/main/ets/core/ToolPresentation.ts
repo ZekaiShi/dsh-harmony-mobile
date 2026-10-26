@@ -7,11 +7,16 @@ export class ToolActivity {
   summary: string = '';
 }
 export class ToolPresentation {
+  static parseArguments(input?: Object): Object | undefined {
+    if (typeof input !== 'string') return input;
+    if (input.length > 131072) return undefined;
+    try { const parsed = JSON.parse(input) as Object; return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : undefined; } catch (_) { return undefined; }
+  }
   private static string(value: string | undefined): string { return typeof value === 'string' ? value : ''; }
   private static compact(text: string): string { return text.replace(/([?&](?:token|api_key|key)=)[^\s&#]+/gi, '$1…').replace(/\s+/g, ' ').trim().slice(0, 240); }
   private static filename(path: string): string { return path.replace(/\\/g, '/').split('/').filter((part: string) => part.length > 0).pop() || ''; }
   static describe(name: string, input?: Object): ToolActivity {
-    const activity = new ToolActivity(); const lower = name.toLowerCase(); const args = (input || {}) as ToolArguments;
+    const activity = new ToolActivity(); const lower = name.toLowerCase(); const args = (this.parseArguments(input) || {}) as ToolArguments;
     const path = this.string(args.file_path) || this.string(args.path) || this.string(args.filename);
     const command = this.string(args.cmd) || this.string(args.command);
     if (/github|gitlab/.test(lower)) {
@@ -33,12 +38,15 @@ export class ToolPresentation {
       activity.category = 'read'; activity.summary = this.filename(path) || name;
     } else if (/search|grep|find_file|list_file/.test(lower)) {
       activity.category = 'search'; activity.summary = this.string(args.query) || this.string(args.pattern) || path || name;
+    } else if (/spawn_agent|send_message_to_agent|wait_agent|subagent|(^|[_.:])(agent|task|delegate)([_.:]|$)/.test(lower)) {
+      activity.category = 'agent'; activity.summary = name;
     } else if (/web|browse|fetch|http/.test(lower)) {
       activity.category = 'web'; activity.summary = this.string(args.url) || this.string(args.query) || name;
     } else activity.summary = name;
     activity.summary = this.compact(activity.summary); return activity;
   }
   static label(category: string, status: string): string {
+    if (status === 'ended') return '已结束';
     const active = status === 'running'; const failed = status === 'error';
     if (category === 'terminal') return failed ? '运行失败' : active ? '正在运行' : '已运行';
     if (category === 'edit') return failed ? '编辑失败' : active ? '正在编辑' : '已编辑';
@@ -48,6 +56,7 @@ export class ToolPresentation {
     if (category === 'read') return failed ? '读取失败' : active ? '正在读取' : '已读取';
     if (category === 'search') return failed ? '搜索失败' : active ? '正在搜索' : '已搜索';
     if (category === 'web') return failed ? '访问失败' : active ? '正在访问' : '已访问';
+    if (category === 'agent') return failed ? 'Agent 调用失败' : active ? '正在调用 Agent' : '已调用 Agent';
     return failed ? '调用失败' : active ? '正在调用' : '已调用';
   }
 }

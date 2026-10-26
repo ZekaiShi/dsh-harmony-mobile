@@ -160,6 +160,9 @@ try {
   await clickText('关闭');
   report.checked.push('File reference tap preserves path and line range without a bogus HTTP request', 'Native horizontally scrollable Markdown table');
   fixture.activityShowcase();
+  const grouped = await waitFor(nodes => nodes.some(a => a?.id?.startsWith('activity-toggle-activity:')), 'Grouped tool activity was not shown');
+  const groupToggle = grouped.find(a => a?.id?.startsWith('activity-toggle-activity:'));
+  run('shell', 'uitest', 'uiInput', 'click', ...point(groupToggle));
   await waitFor(hasText('已使用 GitHub'), 'Semantic tool activity was not shown');
   const activityNodes = await waitFor(hasText('正在运行'), 'Running command label did not appear');
   for (const category of ['github','edit','image','search','read','web','tool','terminal']) {

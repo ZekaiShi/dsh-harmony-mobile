@@ -20,6 +20,7 @@ import { PageNavigation } from '../platform/PageNavigation';
 import { PageBackdrop } from '../components/PageBackdrop';
 import { ConversationExport } from '../core/ConversationExport';
 import { ConversationFiles } from '../platform/ConversationFiles';
+import { ExportOptions } from '../components/ExportOptions';
 
 @Entry
 @Component
@@ -196,10 +197,8 @@ struct Media {
   private useImage(asset: ImageAsset, purpose: string): void { this.stop(); this.reference = asset; this.purpose = purpose; this.returnTo('main'); this.prompt = ''; this.save(); }
   private async export(asset: ImageAsset): Promise<void> { try { if (await this.files.export(this.getUIContext().getHostContext() as common.Context, asset)) this.toast('图片已导出'); } catch (_) { this.toast('图片未能导出，请重试'); } }
   private copy(text: string): void { pasteboard.getSystemPasteboard().setData(pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, text)).then(() => this.toast('已复制')).catch(() => this.toast('复制失败')); }
-  private exportMenu(): void {
-    this.getUIContext().showActionSheet({ title: '导出图像问答 / 作品', message: 'PNG / PDF 包含本机参考图与生成图；Markdown 保留文字，图片仅列出名称。导出在本机完成。', sheets: [
-      { title: '长图 PNG', action: () => { void this.exportRecord('png'); } }, { title: 'Markdown 文件', action: () => { void this.exportRecord('md'); } }, { title: 'PDF 文档', action: () => { void this.exportRecord('pdf'); } }
-    ] });
+  @Builder private exportOptions() {
+    ExportOptions((format: string): void => { void this.exportRecord(format); })
   }
   private async exportRecord(format: string): Promise<void> {
     if (this.exporting) return; this.exporting = true;
@@ -339,7 +338,7 @@ struct Media {
         if (this.activeText) MarkdownView({ content: this.activeText })
         if (this.activeError) Text(this.activeError).fontSize(13).lineHeight(22).fontColor($r('app.color.danger')).width('100%')
         if (this.activeStatus !== 'pending') {
-          Button(this.exporting ? '导出中…' : '导出对话 / 作品', { type: ButtonType.Normal }).fontSize(12).height(40).width('100%').borderRadius(20).backgroundColor($r('app.color.accent_soft')).fontColor($r('app.color.text_primary')).id('media-export-record').enabled(!this.exporting).onClick(() => this.exportMenu())
+          Button(this.exporting ? '导出中…' : '导出对话 / 作品', { type: ButtonType.Normal }).fontSize(12).height(40).width('100%').borderRadius(20).backgroundColor($r('app.color.accent_soft')).fontColor($r('app.color.text_primary')).id('media-export-record').enabled(!this.exporting).bindMenu(this.exportOptions)
           Row({ space: 8 }) {
             Button('使用描述', { type: ButtonType.Normal }).fontSize(12).height(40).layoutWeight(1).borderRadius(20).backgroundColor($r('app.color.accent_soft')).fontColor($r('app.color.text_primary')).id('media-reuse').onClick(() => { this.prompt = this.active.prompt; this.returnTo('main'); this.save(); })
             if (this.activeText) Button('复制文字', { type: ButtonType.Normal }).fontSize(12).height(40).layoutWeight(1).borderRadius(20).backgroundColor($r('app.color.accent_soft')).fontColor($r('app.color.text_primary')).onClick(() => this.copy(this.activeText))
@@ -383,19 +382,19 @@ struct Media {
   @Builder private previewHeader() { this.header('preview') }
   @Builder private destination(page: string) {
     if (page === 'settings') {
-      NavDestination() { Column() { this.settings() }.width('100%').height('100%') }.title({ builder: this.settingsHeader, height: 60 }, HarmonyExperience.titleOptions()).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
+      NavDestination() { Column() { this.settings() }.width('100%').height('100%') }.title({ builder: this.settingsHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
     }
     else if (page === 'models') {
-      NavDestination() { Column() { this.modelsPage() }.width('100%').height('100%') }.title({ builder: this.modelsHeader, height: 60 }, HarmonyExperience.titleOptions()).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
+      NavDestination() { Column() { this.modelsPage() }.width('100%').height('100%') }.title({ builder: this.modelsHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
     }
     else if (page === 'history') {
-      NavDestination() { Column() { this.history() }.width('100%').height('100%') }.title({ builder: this.historyHeader, height: 60 }, HarmonyExperience.titleOptions()).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
+      NavDestination() { Column() { this.history() }.width('100%').height('100%') }.title({ builder: this.historyHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
     }
     else if (page === 'detail') {
-      NavDestination() { Column() { this.detail() }.width('100%').height('100%') }.title({ builder: this.detailHeader, height: 60 }, HarmonyExperience.titleOptions()).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
+      NavDestination() { Column() { this.detail() }.width('100%').height('100%') }.title({ builder: this.detailHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
     }
     else if (page === 'preview') {
-      NavDestination() { Column() { this.previewPage() }.width('100%').height('100%') }.title({ builder: this.previewHeader, height: 60 }, HarmonyExperience.titleOptions()).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
+      NavDestination() { Column() { this.previewPage() }.width('100%').height('100%') }.title({ builder: this.previewHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
     }
   }
   build() {
@@ -405,7 +404,7 @@ struct Media {
       .navDestination(this.destination).title({ builder: this.mainHeader, height: 60 }, HarmonyExperience.titleOptions())
       .titleMode(NavigationTitleMode.Mini).hideBackButton(true).hideToolBar(true).mode(NavigationMode.Stack)
       .width('100%').height('100%').backgroundColor($r('app.color.page_bg'))
-      .systemBarStyle({ statusBarContentColor: this.chromeTextColor })
+      .ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor })
     }.width('100%').height('100%').backgroundColor($r('app.color.page_bg'))
   }
 }
