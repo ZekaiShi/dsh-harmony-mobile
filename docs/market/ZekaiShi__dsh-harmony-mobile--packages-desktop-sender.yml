@@ -1,0 +1,7 @@
+url: https://github.com/ZekaiShi/dsh-harmony-mobile/tree/main/packages/desktop-sender
+name: ZekaiShi/dsh-harmony-mobile#desktop-sender
+category: notify
+description:
+  en: Send selected text from DSH commands to the native HarmonyOS client through the existing paired Desktop bridge.
+  zh: 通过 DSH 现有配对通道，将命令中指定的文字发送到鸿蒙原生客户端。
+tarball: https://github.com/ZekaiShi/dsh-harmony-mobile/releases/download/v0.9.0/dsh-harmony-sender.tgz

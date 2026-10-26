@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.0 — development preview
+
+- Use one theme canvas behind native navigation and transparent system bars; remove full-header material strips while retaining native circular button materials.
+- Add reply/transcript copy and local Markdown, segmented PNG and paginated raster PDF exports. PDF creation does not depend on optional PDFKit runtime support.
+- Normalize chat/Responses/Claude/Gemini usage snapshots with cache/reasoning detail; keep estimates distinct from service reports and account for title requests/regeneration.
+- Name new conversations once after the first complete reply, with an opt-out, bounded title input and preservation of manual/migrated titles.
+- Add a separately installable DSH sender plugin using the official human-command registry and existing Desktop bridge. No new server, model request or credential store.
+- Add isolated QA bundle tooling and synthetic export/usage/title/bridge validation; do not modify production user history in automated tests.
+
 ## 0.8.6 — imported baseline
 
 - Native HarmonyOS chat, image studio and DSH Desktop pairing client.
