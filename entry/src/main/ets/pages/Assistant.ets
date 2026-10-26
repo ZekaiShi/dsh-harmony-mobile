@@ -23,6 +23,8 @@ import { PageNavigation } from '../platform/PageNavigation';
 import { HoldingMotion } from '../platform/HoldingMotion';
 import { ComposerToolbar } from '../components/ComposerToolbar';
 import { PageBackdrop } from '../components/PageBackdrop';
+import { RequestUsage, TokenUsage, UsageEntry } from '../core/TokenUsage';
+import { ConversationTitle } from '../core/ConversationTitle';
 
 @Entry
 @Component
@@ -66,6 +68,12 @@ struct Assistant {
   private catalogEpoch: number = 0;
   @State private rename: boolean = false;
   @State private titleInput: string = '';
+  @State private naming: boolean = false;
+  @State private automaticTitles: boolean = true;
+  @State private editUsage: boolean = false;
+  private titleTask: StreamHandle | undefined;
+  private titleEpoch: number = 0;
+  private titleConversation: LocalConversation | undefined;
   @State private thinking: string[] = [];
   private data: AssistantData = new AssistantData();
   private store: AssistantStore = new AssistantStore();
@@ -97,7 +105,7 @@ struct Assistant {
     try {
       this.data = this.store.load(this.getUIContext().getHostContext() as common.Context);
       this.files.load(this.getUIContext().getHostContext() as common.Context);
-      this.profile = this.data.profile; this.conversations = this.data.conversations.slice(); this.ready = true;
+      this.profile = this.data.profile; this.conversations = this.data.conversations.slice(); this.automaticTitles = this.data.autoTitle; this.ready = true;
     } catch (_) { this.error = '本机历史暂时无法读取，原文件已保留。请重启后重试。'; }
   }
   onPageHide(): void { this.attachmentEpoch++; this.cancelCatalog(); this.stop(); this.save(); this.keyInput = ''; }
@@ -126,6 +134,7 @@ struct Assistant {
   private settings(): void {
     this.stop(); this.save(); this.returnScreen = this.screen === 'chat' ? 'chat' : 'list';
     this.editProvider = this.profile.provider; this.editProtocol = this.profile.protocol; this.editName = this.profile.name; this.editBase = this.profile.base; this.editModel = this.profile.model; this.editSystem = this.profile.system;
+    this.editUsage = this.profile.requestUsage ?? this.profile.provider !== 'custom';
     this.editWindow = this.profile.contextWindow ? String(this.profile.contextWindow) : ''; this.editInput = this.profile.inputModalities || []; this.editReasoningOptions = this.profile.reasoningOptions || [];
     this.keyInput = ''; this.hasKey = false; this.error = ''; this.forward('settings');
     this.refreshKeyStatus();
@@ -147,6 +156,7 @@ struct Assistant {
     this.cancelCatalog(); const saved = this.data.profiles.find((item: ModelProfile) => item.provider === preset.id);
     this.editProvider = preset.id; this.editProtocol = saved?.protocol || preset.protocol; this.editBase = saved?.base || preset.base;
     this.editName = saved?.name || preset.name; this.editModel = saved?.model || ''; this.editSystem = saved?.system || '';
+    this.editUsage = saved?.requestUsage ?? preset.id !== 'custom';
     this.editWindow = saved?.contextWindow ? String(saved.contextWindow) : ''; this.editInput = saved?.inputModalities || []; this.editReasoningOptions = saved?.reasoningOptions || [];
     this.keyInput = ''; this.hasKey = false; this.models = []; this.error = ''; this.returnTo('settings');
     this.refreshKeyStatus();
@@ -172,6 +182,7 @@ struct Assistant {
     this.error = ''; this.busy = true;
     try {
       const candidate = new ModelProfile(); candidate.name = this.editName; candidate.base = this.editBase; candidate.model = this.editModel; candidate.system = this.editSystem; candidate.provider = this.editProvider; candidate.protocol = this.editProtocol;
+      candidate.requestUsage = this.editUsage;
       candidate.contextWindow = this.windowValue(); candidate.inputModalities = this.editInput; candidate.reasoningOptions = this.editReasoningOptions;
       const profile = AssistantCore.profile(candidate); const origin = AssistantCore.endpoint(profile.base).origin;
       const key = this.keyInput.trim() ? AssistantCore.key(this.keyInput) : await this.store.key(origin);
@@ -196,6 +207,7 @@ struct Assistant {
     if (this.busy || !this.active.id || !this.ready) return;
     const text = this.draft.trim(); if (!regenerate && !text && !this.attachments.length) return;
     if (this.active.messages.length >= 398) { this.error = '本对话较长，请新建对话继续。'; return; }
+    if (this.active.usageEntries.length >= 1998) { this.error = '本对话请求记录较多，请新建对话继续。'; return; }
     const epoch = ++this.epoch; this.busy = true; this.error = ''; this.follow = true;
     try {
       const key = await this.store.key(AssistantCore.endpoint(this.active.profile.base).origin);
@@ -216,8 +228,10 @@ struct Assistant {
         if (this.active.title === '新对话') this.active.title = Array.from((text || pending.attachments[0]?.name || '附件对话').replace(/\s+/g, ' ')).slice(0, 24).join('');
       }
       const reply = new LocalMessage(); reply.id = util.generateRandomUUID(true); reply.role = 'assistant'; reply.status = 'streaming'; this.active.messages.push(reply);
+      this.recordUsage(this.active, reply.id, 'chat', TokenUsage.estimate(request.messages.map((m) => m.content).join('\n'), ''));
       this.active.updatedAt = Date.now(); this.changed(); this.save();
       this.task = this.client.start(this.active.profile, key, request, {
+        usage: (value: RequestUsage): void => { if (epoch === this.epoch) { reply.usage = value; this.recordUsage(this.active, reply.id, 'chat', value); } },
         update: (content: string, reasoning: string): void => {
           if (epoch !== this.epoch) return;
           reply.text = content; reply.reasoning = reasoning; this.changed(); this.scheduleSave();
@@ -227,6 +241,7 @@ struct Assistant {
           reply.status = 'done'; this.busy = false; this.task = undefined;
           if (reason === 'length') this.error = '回复达到服务端长度上限，可继续追问。';
           this.active.updatedAt = Date.now(); this.changed(); this.save();
+          if (reason !== 'length') void this.nameConversation(false);
         },
         error: (message: string): void => {
           if (epoch !== this.epoch) return;
@@ -236,12 +251,57 @@ struct Assistant {
     } catch (error) { if (epoch === this.epoch) { this.busy = false; this.error = (error as Error).message || '请求未完成。'; this.changed(); this.save(); } }
   }
   private stop(): void {
+    this.cancelTitle();
     this.epoch++; this.task?.close(); this.task = undefined;
     if (this.busy && this.active.id) {
       const last = this.active.messages[this.active.messages.length - 1];
       if (last?.status === 'streaming') last.status = 'interrupted';
     }
     this.busy = false; this.changed(); this.save();
+  }
+  private recordUsage(conversation: LocalConversation, id: string, kind: string, usage: RequestUsage): void {
+    let entry = conversation.usageEntries.find((item: UsageEntry) => item.id === id);
+    if (!entry) { entry = new UsageEntry(); entry.id = id; entry.kind = kind; entry.model = conversation.profile.model; conversation.usageEntries.push(entry); }
+    entry.usage = usage;
+  }
+  private cancelTitle(): void {
+    this.titleEpoch++; this.titleTask?.close(); this.titleTask = undefined;
+    if (this.titleConversation?.titleState === 'running') this.titleConversation.titleState = 'failed';
+    this.titleConversation = undefined; this.naming = false;
+  }
+  private async nameConversation(manual: boolean): Promise<void> {
+    const conversation = this.active;
+    if (this.naming || this.busy || !conversation.id || conversation.usageEntries.length >= 1998) return;
+    if (!manual && !ConversationTitle.eligible(conversation, this.data.autoTitle)) return;
+    const epoch = ++this.titleEpoch, original = conversation.title, id = util.generateRandomUUID(true);
+    let title = '';
+    try {
+      const request = ConversationTitle.request(conversation), profile = ConversationTitle.profile(conversation.profile);
+      conversation.titleState = 'running'; this.naming = true; this.titleConversation = conversation; this.save();
+      const key = await this.store.key(AssistantCore.endpoint(profile.base).origin);
+      if (epoch !== this.titleEpoch) return;
+      if (!key) throw new Error('未配置密钥');
+      this.recordUsage(conversation, id, 'title', TokenUsage.estimate(request.messages[0].content, ''));
+      this.titleTask = this.client.start(profile, key, request, {
+        usage: (value: RequestUsage): void => { if (epoch === this.titleEpoch) this.recordUsage(conversation, id, 'title', value); },
+        update: (text: string): void => { if (epoch === this.titleEpoch) title = text; },
+        done: (): void => {
+          if (epoch !== this.titleEpoch) return;
+          this.naming = false; this.titleTask = undefined; this.titleConversation = undefined;
+          try {
+            const proposed = ConversationTitle.clean(title);
+            if (conversation.title === original && (manual || conversation.titleSource !== 'manual')) { conversation.title = proposed; conversation.titleSource = 'ai'; }
+            conversation.titleState = 'done'; conversation.updatedAt = Date.now();
+          } catch (_) { conversation.titleState = 'failed'; this.toast('AI 命名未完成，已保留原名称'); }
+          this.changed(); this.save();
+        },
+        error: (): void => { if (epoch === this.titleEpoch) { this.naming = false; this.titleTask = undefined; this.titleConversation = undefined; conversation.titleState = 'failed'; this.changed(); this.save(); this.toast('AI 命名未完成，已保留原名称'); } }
+      });
+    } catch (_) { if (epoch === this.titleEpoch) { conversation.titleState = 'failed'; this.naming = false; this.titleConversation = undefined; this.save(); if (manual) this.toast('请先完成一轮对话，并配置该服务的密钥'); } }
+  }
+  private usageDetails(): void {
+    Keyboard.dismiss(this.getUIContext());
+    this.getUIContext().showAlertDialog({ title: '会话 Token 统计', message: TokenUsage.summary(this.active.usageEntries), primaryButton: { value: '知道了', action: () => {} } });
   }
   private back(): void {
     Keyboard.dismiss(this.getUIContext());
@@ -446,6 +506,15 @@ struct Assistant {
           Text('上下文窗口 token 数（选填，优先读取目录）').fontSize(12).fontColor($r('app.color.text_secondary')).width('100%')
           TextInput({ text: this.editWindow, placeholder: '未知时留空，例如 128000' }).type(InputType.Number).maxLength(8).height(44).fontSize(14).id('model-context-window').onChange((value: string) => { this.editWindow = value; })
           Text('系统指令（选填）').fontSize(12).fontColor($r('app.color.text_secondary')).width('100%')
+          if (this.editProtocol === 'chat') Row({ space: 12 }) {
+            Text('请求服务端 Token 用量').fontSize(13).fontColor($r('app.color.text_primary')).layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.editUsage }).id('model-request-usage').onChange((value: boolean) => { this.editUsage = value; })
+          }.width('100%')
+          Text('首次完整回复后，额外调用当前模型生成一次标题，可能计费；可随时关闭。旧会话和手动标题不会自动覆盖。').fontSize(12).lineHeight(20).fontColor($r('app.color.text_secondary')).width('100%')
+          Row({ space: 12 }) {
+            Text('新会话自动 AI 命名').fontSize(13).fontColor($r('app.color.text_primary')).layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.automaticTitles }).id('assistant-auto-title').onChange((value: boolean) => { this.automaticTitles = value; this.data.autoTitle = value; if (!value) this.cancelTitle(); this.save(); })
+          }.width('100%')
           TextArea({ text: this.editSystem, placeholder: '例如：使用中文，先给结论，再说明依据。' }).height(86).fontSize(14).maxLength(8000).id('model-system').onChange((value: string) => { this.editSystem = value; })
           Text('新配置用于新对话；已有对话保留原来的服务和模型。每次发送最近 40 条有效消息与系统指令。').fontSize(12).lineHeight(20).fontColor($r('app.color.text_secondary')).width('100%')
           this.banner()
@@ -460,13 +529,15 @@ struct Assistant {
     Column({ space: 0 }) {
       Row({ space: 10 }) {
         Button('重命名', { type: ButtonType.Normal }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).onClick(() => { this.titleInput = this.active.title; this.rename = !this.rename; })
-        Button('复制会话', { type: ButtonType.Normal }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).onClick(() => this.copy(AssistantCore.transcript(this.active)))
+        Button('复制会话', { type: ButtonType.Normal }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).id('assistant-copy-conversation').onClick(() => this.copy(AssistantCore.transcript(this.active)))
+        Button('Token', { type: ButtonType.Normal }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).id('assistant-usage').onClick(() => this.usageDetails())
         Blank()
-        Text('本机会话').fontSize(10).fontColor($r('app.color.text_secondary'))
+        Text(this.naming ? '命名中…' : '本机会话').fontSize(10).fontColor($r('app.color.text_secondary'))
       }.padding({ left: 15, right: 23 }).width('100%')
       if (this.rename) Row({ space: 8 }) {
         TextInput({ text: this.titleInput }).layoutWeight(1).height(40).maxLength(80).id('conversation-title').onChange((text: string) => { this.titleInput = text; })
-        Button('保存名称', { type: ButtonType.Normal }).height(40).fontSize(12).onClick(() => { if (this.titleInput.trim()) { this.active.title = this.titleInput.trim(); this.active.updatedAt = Date.now(); this.changed(); this.save(); this.rename = false; } })
+        Button('保存名称', { type: ButtonType.Normal }).height(40).fontSize(12).onClick(() => { if (this.titleInput.trim()) { this.cancelTitle(); this.active.title = this.titleInput.trim(); this.active.titleSource = 'manual'; this.active.titleState = 'done'; this.active.updatedAt = Date.now(); this.changed(); this.save(); this.rename = false; } })
+        Button('AI 命名', { type: ButtonType.Normal }).height(40).fontSize(12).enabled(!this.naming && !this.busy).id('assistant-ai-title').onClick(() => { void this.nameConversation(true); })
       }.padding({ left: 22, right: 22 }).width('100%')
       this.banner()
       List({ scroller: this.scroller, space: 24 }) {
@@ -504,7 +575,8 @@ struct Assistant {
                 if (message.status !== 'streaming') {
                   Row({ space: 6 }) {
                     if (message.text) Button({ type: ButtonType.Normal }) { SymbolGlyph($r('sys.symbol.doc_text_on_doc_text')).fontSize(16).fontColor([$r('app.color.text_secondary')]) }
-                      .width(36).height(36).backgroundColor(Color.Transparent).accessibilityText('复制这条回复').onClick(() => this.copy(message.text))
+                      .width(36).height(36).backgroundColor(Color.Transparent).id('assistant-copy-' + message.id).accessibilityText('复制这条回复').onClick(() => this.copy(message.text))
+                    if (message.usage) Text(TokenUsage.label(message.usage)).fontSize(10).fontColor($r('app.color.text_secondary')).onClick(() => this.usageDetails())
                     if (message.status === 'error' || message.status === 'interrupted') Text(message.status === 'error' ? '请求未完成' : '已停止').fontSize(11).fontColor($r('app.color.text_secondary'))
                     if (message.id === this.active.messages[this.active.messages.length - 1]?.id && !this.busy) Button('重新生成', { type: ButtonType.Normal }).height(36).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).onClick(() => { void this.send(true); })
                   }.width('100%')

@@ -11,6 +11,7 @@ export class ModelProfile {
   provider: string = 'custom'; protocol: string = 'chat';
   contextWindow: number = 0; reasoningLevel: string = 'auto'; reasoningOptions: string[] = [];
   inputModalities: string[] = [];
+  requestUsage?: boolean;
 }
 export class LocalMessage {
   id: string = ''; role: string = 'user'; text: string = ''; reasoning: string = ''; status: string = 'done';
@@ -58,6 +59,7 @@ export class AssistantCore {
     const copy = new ModelProfile(); copy.name = profile.name.trim().slice(0, 40) || '我的模型';
     copy.base = profile.base.trim().replace(/\/+$/, ''); copy.model = profile.model.trim(); copy.system = profile.system;
     copy.provider = profile.provider || 'custom'; copy.protocol = profile.protocol || 'chat';
+    copy.requestUsage = profile.requestUsage === undefined ? copy.provider !== 'custom' : profile.requestUsage === true;
     const window = profile.contextWindow || 0;
     if (!Number.isInteger(window) || window < 0 || window > 10000000) throw new Error('上下文窗口需填写 1 到 10000000 的整数，留空表示未知。');
     copy.contextWindow = window;

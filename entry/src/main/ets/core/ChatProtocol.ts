@@ -48,7 +48,7 @@ export class ChatProtocol {
       if (profile.system.trim()) body.systemInstruction = { parts: [{ text: profile.system }] };
     } else body.messages = request.messages.map((item: CompletionMessage): WireMessage => ({ role: item.role, content: this.parts(item, 'chat') }));
     this.reasoning(body, profile);
-    if (protocol === 'chat' && ['openai','deepseek','openrouter','siliconflow','silicon','volcengine','ark','dashscope','moonshot','zhipu','minimax'].includes(profile.provider)) body.stream_options = { include_usage: true };
+    if (protocol === 'chat' && profile.requestUsage !== false && (profile.requestUsage === true || profile.provider !== 'custom')) body.stream_options = { include_usage: true };
     if (request.maxOutputTokens) {
       if (protocol === 'responses') body.max_output_tokens = request.maxOutputTokens;
       else if (protocol === 'gemini') { if (!body.generationConfig) body.generationConfig = {}; body.generationConfig.maxOutputTokens = request.maxOutputTokens; }
