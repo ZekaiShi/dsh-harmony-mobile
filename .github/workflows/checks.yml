@@ -1,0 +1,27 @@
+name: Source and protocol checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  core-and-sender:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: node tools/check-public-source.mjs
+      - run: npm run upstream:prepare
+      - run: npm run check
+      - name: Isolated official sender services
+        run: npm install --prefix .cache/sender-host --ignore-scripts --package-lock=false --cache .cache/npm @deepseek-ai/cordis@4.0.5 @deepseek-ai/dsh-commands@0.2.1-rc.2
+      - run: npm run verify:sender
+      - run: npm pack ./packages/desktop-sender --ignore-scripts --pack-destination .cache
+
+# Native HAP compilation and emulator UI QA require the official local SDK;
+# this workflow does not claim those checks or access signing materials.
