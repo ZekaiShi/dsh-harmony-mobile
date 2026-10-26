@@ -2,7 +2,7 @@ import { common } from '@kit.AbilityKit';
 import { fileIo, picker } from '@kit.CoreFileKit';
 import { image } from '@kit.ImageKit';
 import { util } from '@kit.ArkTS';
-import { pdfService } from '@kit.PDFKit';
+import { RasterPdf } from '../core/RasterPdf';
 import { LengthMetricsUnit } from '@kit.ArkUI';
 import { ConversationExport, ExportDocument, ExportPage, PaintItem } from '../core/ConversationExport';
 
@@ -76,18 +76,24 @@ export class ConversationFiles {
         result.files.push(path);
       }
       if (format === 'pdf') {
-        const document = new pdfService.PdfDocument();
+        const path = result.root + '/conversation.pdf';
+        const document = fileIo.openSync(path, fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.TRUNC);
         try {
-          if (!document.createDocument(595, 842)) throw new Error('系统 PDF 创建失败。');
-          // Insert at the front in reverse order; no unsupported append index.
-          for (let index = result.files.length - 1; index >= 0; index--) {
-            const page = index === result.files.length - 1 && document.getPageCount() > 0 ? document.getPage(0) : document.insertBlankPage(0, 595, 842);
-            page.addImageObject(result.files[index], 0, 0, 595, 842);
+          const writer = new RasterPdf(result.files.length, (data: Uint8Array): void => {
+            if (fileIo.writeSync(document.fd, data.buffer as ArrayBuffer) !== data.length) throw new Error('PDF 写入不完整。');
+          });
+          for (let index = 0; index < result.files.length; index++) {
+            const input = fileIo.openSync(result.files[index], fileIo.OpenMode.READ_ONLY);
+            try {
+              const bytes = new Uint8Array(fileIo.statSync(input.fd).size);
+              if (fileIo.readSync(input.fd, bytes.buffer as ArrayBuffer) !== bytes.length) throw new Error('PDF 页面读取不完整。');
+              writer.page(bytes, ConversationExport.WIDTH, pages[index].height);
+            } finally { fileIo.closeSync(input); }
           }
-          const path = result.root + '/conversation.pdf'; if (!document.saveDocument(path)) throw new Error('系统 PDF 保存失败。');
-          for (const temporary of result.files) fileIo.unlinkSync(temporary);
-          result.files = [path]; result.names = [ConversationExport.filename(doc.title, 'pdf')];
-        } finally { document.releaseDocument(); }
+          writer.finish(); fileIo.fsyncSync(document.fd);
+        } finally { fileIo.closeSync(document); }
+        for (const temporary of result.files) fileIo.unlinkSync(temporary);
+        result.files = [path]; result.names = [ConversationExport.filename(doc.title, 'pdf')];
       } else result.names = result.files.map((file: string, index: number) => ConversationExport.filename(doc.title + (pages.length > 1 ? '-' + (index + 1) : ''), 'png'));
       return result;
     } catch (error) { ConversationFiles.dispose(context, result); throw new Error((error as Error).message || '导出未完成。'); }
