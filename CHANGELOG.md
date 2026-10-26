@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.2 — native rename flow
+
+- Move rename to a native destination with animated entry/return instead of inserting an abrupt editor row into the message list.
+- Use shared native circular title actions for save and AI naming, and make that the documented default for new eligible actions.
+- Preview editable AI name suggestions before saving; cancellation preserves the original title, empty names cannot save, and title requests remain bounded and accounted for.
+
 ## 0.9.1 — navigation and activity fixes
 
 - Let the system fit content around its bars, match bar colours to the page, and explicitly preserve the Navigation/NavDestination safe area on foreground return.

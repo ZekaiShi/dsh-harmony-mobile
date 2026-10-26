@@ -10,6 +10,7 @@ test('all three modes return through their own list or landing page before the w
     assert.deepEqual(seen, expected);
   };
   chain('assistant', 'context', ['chat','list','home']);
+  chain('assistant', 'rename', ['chat','list','home']);
   chain('assistant', 'providers', ['settings','list','home']);
   chain('media', 'models', ['settings','main','home']);
   chain('desktop', 'chat', ['sessions','devices','home','exit']);

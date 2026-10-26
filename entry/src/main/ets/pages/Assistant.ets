@@ -19,6 +19,7 @@ import { ChatFiles } from '../platform/ChatFiles';
 import { ChatProtocol } from '../core/ChatProtocol';
 import { BackNavigation } from '../core/BackNavigation';
 import { NativeBackButton } from '../components/NativeBackButton';
+import { NativeTitleAction } from '../components/NativeTitleAction';
 import { PageNavigation } from '../platform/PageNavigation';
 import { HoldingMotion } from '../platform/HoldingMotion';
 import { ComposerToolbar } from '../components/ComposerToolbar';
@@ -69,7 +70,6 @@ struct Assistant {
   private attachmentEpoch: number = 0;
   private catalogTask: StreamHandle | undefined;
   private catalogEpoch: number = 0;
-  @State private rename: boolean = false;
   @State private titleInput: string = '';
   @State private naming: boolean = false;
   @State private automaticTitles: boolean = true;
@@ -127,7 +127,7 @@ struct Assistant {
     if (this.follow) setTimeout(() => { try { this.scroller.scrollEdge(Edge.Bottom); } catch (_) {} }, 40);
   }
   private open(conversation: LocalConversation): void {
-    this.attachmentEpoch++; this.stop(); this.save(); this.active = conversation; this.draft = conversation.draft; this.attachments = (conversation.draftAttachments || []).slice(); this.reasoningLevel = conversation.profile.reasoningLevel || 'auto'; this.rename = false; this.error = ''; this.forward('chat', true); this.follow = true; this.changed();
+    this.attachmentEpoch++; this.stop(); this.save(); this.active = conversation; this.draft = conversation.draft; this.attachments = (conversation.draftAttachments || []).slice(); this.reasoningLevel = conversation.profile.reasoningLevel || 'auto'; this.error = ''; this.forward('chat', true); this.follow = true; this.changed();
   }
   private createConversation(): void {
     if (!this.profile.base) { this.settings(); return; }
@@ -276,7 +276,7 @@ struct Assistant {
   private async nameConversation(manual: boolean): Promise<void> {
     const conversation = this.active;
     if (this.naming || this.busy || !conversation.id || conversation.usageEntries.length >= 1998) return;
-    if (!manual && !ConversationTitle.eligible(conversation, this.data.autoTitle)) return;
+    if (!manual && (this.screen === 'rename' || !ConversationTitle.eligible(conversation, this.data.autoTitle))) return;
     const epoch = ++this.titleEpoch, original = conversation.title, id = util.generateRandomUUID(true);
     let title = '';
     try {
@@ -294,7 +294,8 @@ struct Assistant {
           this.naming = false; this.titleTask = undefined; this.titleConversation = undefined;
           try {
             const proposed = ConversationTitle.clean(title);
-            if (conversation.title === original && (manual || conversation.titleSource !== 'manual')) { conversation.title = proposed; conversation.titleSource = 'ai'; }
+            if (manual && this.screen === 'rename') this.titleInput = proposed;
+            else if (conversation.title === original && (manual || conversation.titleSource !== 'manual')) { conversation.title = proposed; conversation.titleSource = 'ai'; }
             conversation.titleState = 'done'; conversation.updatedAt = Date.now();
           } catch (_) { conversation.titleState = 'failed'; this.toast('AI 命名未完成，已保留原名称'); }
           this.changed(); this.save();
@@ -324,6 +325,7 @@ struct Assistant {
     const target = BackNavigation.target('assistant', this.screen, this.returnScreen);
     if (this.screen === 'providers' || this.screen === 'models') this.cancelCatalog();
     if (this.screen === 'settings') this.keyInput = '';
+    if (this.screen === 'rename') this.cancelTitle();
     if (this.screen === 'chat') { this.attachmentEpoch++; this.stop(); this.save(); }
     this.error = '';
     if (target === 'home') { this.save(); this.getUIContext().getRouter().back(); }
@@ -400,14 +402,17 @@ struct Assistant {
     Row({ space: 10 }) {
       NativeBackButton({ controlId: 'assistant-back', onBack: () => this.back() })
       Column({ space: 3 }) {
-        Text(page === 'context' ? '上下文窗口' : page === 'chat' ? this.activeTitle : page === 'providers' ? '选择服务商' : page === 'models' ? '选择模型' : page === 'settings' ? '模型设置' : page === 'privacy' ? '数据与隐私' : '独立 AI 聊天').fontSize(17).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary')).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-        Text(page === 'chat' ? this.busy ? '正在回复…' : this.active.profile.model : '手机直连模型服务').fontSize(11).fontColor($r('app.color.text_secondary')).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(page === 'rename' ? '重命名' : page === 'context' ? '上下文窗口' : page === 'chat' ? this.activeTitle : page === 'providers' ? '选择服务商' : page === 'models' ? '选择模型' : page === 'settings' ? '模型设置' : page === 'privacy' ? '数据与隐私' : '独立 AI 聊天').fontSize(17).fontWeight(FontWeight.Medium).fontColor($r('app.color.text_primary')).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(page === 'rename' ? '编辑后保存' : page === 'chat' ? this.busy ? '正在回复…' : this.active.profile.model : '手机直连模型服务').fontSize(11).fontColor($r('app.color.text_secondary')).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       if (page === 'chat' || page === 'list') {
-        Button({ type: ButtonType.Circle }) { SymbolGlyph($r('sys.symbol.gearshape')).fontSize(21).fontColor([$r('app.color.text_primary')]) }
-          .attributeModifier(new NativeCircleStyle(44, true)).id('assistant-settings').accessibilityText('模型设置').onClick(() => this.settings())
-        Button({ type: ButtonType.Circle }) { SymbolGlyph($r('sys.symbol.square_and_pencil')).fontSize(22).fontColor([$r('app.color.text_primary')]) }
-          .attributeModifier(new NativeCircleStyle(44, true)).id('assistant-new').accessibilityText('新建独立对话').enabled(this.ready && !this.busy).onClick(() => this.createConversation())
+        NativeTitleAction({ symbol: $r('sys.symbol.gearshape'), controlId: 'assistant-settings', label: '模型设置', onAction: () => this.settings() })
+        NativeTitleAction({ symbol: $r('sys.symbol.square_and_pencil'), controlId: 'assistant-new', label: '新建独立对话', available: this.ready && !this.busy, onAction: () => this.createConversation() })
+      } else if (page === 'rename') {
+        NativeTitleAction({ symbol: $r('sys.symbol.lightbulb'), controlId: 'assistant-ai-title', label: 'AI 命名', pending: this.naming,
+          available: !this.busy && this.active.messages.some((m: LocalMessage) => m.role === 'assistant' && m.status === 'done' && !!m.text), onAction: () => { void this.nameConversation(true); } })
+        NativeTitleAction({ symbol: $r('sys.symbol.checkmark'), controlId: 'assistant-save-title', label: '保存名称',
+          available: !!this.titleInput.trim() && !this.naming, onAction: () => this.saveTitle() })
       }
     }.padding({ left: 8, right: 12 }).height(60).width('100%')
   }
@@ -543,16 +548,11 @@ struct Assistant {
   @Builder private chat() {
     Column({ space: 0 }) {
       Row({ space: 4 }) {
-        Button('重命名', { type: ButtonType.Normal }).layoutWeight(1).padding({ left: 8, right: 8 }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).onClick(() => { this.titleInput = this.active.title; this.rename = !this.rename; })
+        Button('重命名', { type: ButtonType.Normal }).layoutWeight(1).padding({ left: 8, right: 8 }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).id('assistant-rename').onClick(() => this.openRename())
         Button('复制会话', { type: ButtonType.Normal }).layoutWeight(1).padding({ left: 8, right: 8 }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).id('assistant-copy-conversation').onClick(() => this.copy(AssistantCore.transcript(this.active)))
         Button('Token', { type: ButtonType.Normal }).layoutWeight(1).padding({ left: 8, right: 8 }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).id('assistant-usage').onClick(() => this.usageDetails())
         Button(this.exporting ? '导出中…' : '导出', { type: ButtonType.Normal }).layoutWeight(1).padding({ left: 8, right: 8 }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).id('assistant-export').enabled(!this.exporting && this.active.messages.length > 0).bindMenu(this.exportOptions)
       }.padding({ left: 15, right: 23 }).width('100%')
-      if (this.rename) Row({ space: 8 }) {
-        TextInput({ text: this.titleInput }).layoutWeight(1).height(40).maxLength(80).id('conversation-title').onChange((text: string) => { this.titleInput = text; })
-        Button('保存名称', { type: ButtonType.Normal }).height(40).fontSize(12).onClick(() => { if (this.titleInput.trim()) { this.cancelTitle(); this.active.title = this.titleInput.trim(); this.active.titleSource = 'manual'; this.active.titleState = 'done'; this.active.updatedAt = Date.now(); this.changed(); this.save(); this.rename = false; } })
-        Button('AI 命名', { type: ButtonType.Normal }).height(40).fontSize(12).enabled(!this.naming && !this.busy).id('assistant-ai-title').onClick(() => { void this.nameConversation(true); })
-      }.padding({ left: 22, right: 22 }).width('100%')
       this.banner()
       List({ scroller: this.scroller, space: 24 }) {
         if (!this.active.messages.length) ListItem() {
@@ -669,6 +669,26 @@ struct Assistant {
       }.layoutWeight(1).width('100%')
     }.width('100%').height('100%')
   }
+  private openRename(): void {
+    Keyboard.dismiss(this.getUIContext()); this.cancelTitle(); this.titleInput = this.active.title; this.error = ''; this.forward('rename');
+  }
+  private saveTitle(): void {
+    if (!this.titleInput.trim() || this.naming) return;
+    Keyboard.dismiss(this.getUIContext()); this.error = ''; this.cancelTitle(); this.active.title = this.titleInput.trim(); this.active.titleSource = 'manual'; this.active.titleState = 'done'; this.active.updatedAt = Date.now(); this.changed(); this.save();
+    if (!this.error) this.returnTo('chat');
+  }
+  @Builder private renamePage() {
+    Column({ space: 14 }) {
+      this.banner()
+      Text('会话名称').fontSize(14).fontColor($r('app.color.text_secondary')).width('100%')
+      TextInput({ text: this.titleInput, placeholder: '输入会话名称' }).height(52).fontSize(17).maxLength(80).borderRadius(18)
+        .backgroundColor($r('app.color.surface')).fontColor($r('app.color.text_primary')).id('conversation-title').enabled(!this.naming)
+        .onChange((text: string) => { this.titleInput = text; }).onSubmit(() => this.saveTitle())
+      Text(this.naming ? '正在生成名称…' : '也可点右上角 AI 生成建议，编辑后保存。').fontSize(13).fontColor($r('app.color.text_secondary')).width('100%')
+      Blank()
+    }.padding(24).width('100%').height('100%').alignItems(HorizontalAlign.Start)
+  }
+  @Builder private renameHeader() { this.header('rename') }
   @Builder private listHeader() { this.header('list') }
   @Builder private chatHeader() { this.header('chat') }
   @Builder private settingsHeader() { this.header('settings') }
@@ -677,7 +697,10 @@ struct Assistant {
   @Builder private contextHeader() { this.header('context') }
   @Builder private privacyHeader() { this.header('privacy') }
   @Builder private destination(page: string) {
-    if (page === 'chat') {
+    if (page === 'rename') {
+      NavDestination() { this.renamePage() }.title({ builder: this.renameHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
+    }
+    else if (page === 'chat') {
       NavDestination() { this.chat() }.title({ builder: this.chatHeader, height: 60 }, HarmonyExperience.titleOptions()).ignoreLayoutSafeArea([], []).systemBarStyle({ statusBarContentColor: this.chromeTextColor }).hideBackButton(true).backgroundColor($r('app.color.page_bg')).onBackPressed(() => { this.back(); return true; })
     }
     else if (page === 'settings') {

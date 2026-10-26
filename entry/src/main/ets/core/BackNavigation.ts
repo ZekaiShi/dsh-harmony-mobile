@@ -4,7 +4,7 @@ export class BackNavigation {
     if (mode === 'assistant') {
       if (screen === 'providers' || screen === 'models') return 'settings';
       if (screen === 'settings') return parent === 'chat' ? 'chat' : 'list';
-      if (screen === 'context') return 'chat';
+      if (screen === 'context' || screen === 'rename') return 'chat';
       if (screen === 'chat' || screen === 'privacy') return 'list';
       return 'home';
     }

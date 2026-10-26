@@ -60,7 +60,7 @@ async function configure(route='/v1',model='qa-model'){
 }
 async function send(text){await input('assistant-draft',text);await click('assistant-send');}
 async function done(){await waitFor(nodes=>has('assistant-send')(nodes)&&nodes.some(n=>n?.text==='重新生成'),'Reply did not complete');}
-async function rename(title){await click('重命名');await input('conversation-title',title);await click('保存名称');await waitFor(has(title),'Conversation header did not update');ownedTitles.add(title);}
+async function rename(title){await click('assistant-rename');await input('conversation-title',title);await click('assistant-save-title');await waitFor(has(title),'Conversation header did not update');ownedTitles.add(title);}
 async function removeOwned(title){
   const nodes=await layout();const row=nodes.find(n=>n?.text===title);if(!row)return;
   const y=Number(row.bounds.match(/\d+/g)[1]);

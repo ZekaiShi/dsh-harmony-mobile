@@ -4,7 +4,7 @@
 
 本项目独立维护，不是 DeepSeek、Dataelem 或华为的官方客户端。
 
-## 0.9.1 开发预览
+## 0.9.2 开发预览
 
 从已经验证的 0.8.6 原生客户端建立，包含：
 
@@ -21,6 +21,8 @@
 电脑端插件位于 [packages/desktop-sender](packages/desktop-sender)，只增加 `/harmony-send` 文字发送命令，复用 DSH Desktop 的现有配对和会话通道。手机软件与插件独立维护，无需安装另一套手机网页。插件尚未收录市场。
 
 0.9.1 统一了三个导出菜单，并将连续思考/工具/Agent 调用默认收起；系统负责避让状态栏，系统栏保持页面底色。新增验证见 [docs/VALIDATION_0.9.1.md](docs/VALIDATION_0.9.1.md)，此前导出/命名验证见 [docs/VALIDATION_0.9.0.md](docs/VALIDATION_0.9.0.md)，市场申请位置及要求见 [docs/MARKET_SUBMISSION.md](docs/MARKET_SUBMISSION.md)。有限回归不能代表所有服务商、设备或公网隧道都已实测。
+
+0.9.2 将重命名改为原生动画页面，保存和 AI 命名默认使用标题栏圆形沉浸光感动作；AI 建议可编辑，保存后生效。验收范围见 [docs/VALIDATION_0.9.2.md](docs/VALIDATION_0.9.2.md)。
 
 ## 开发
 

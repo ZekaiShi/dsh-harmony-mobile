@@ -15,15 +15,19 @@ import { MediaFiles } from '../platform/MediaFiles';
 struct ExportSmoke {
   @State result: string = '仅包含虚构测试资料';
   @State safeTop: number = 0;
+  @State qaBase: string = '';
   aboutToAppear(): void {
     const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
     window.getLastWindow(context).then((current: window.Window) => { this.safeTop = current.getWindowProperties().windowRect.top + current.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM).topRect.height; });
   }
-  private seedMenus(): void {
+  private async seedMenus(): Promise<void> {
     const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
     const store = new AssistantStore(); store.load(context);
     const data = new AssistantData(), profile = new ModelProfile();
     profile.base = 'https://example.invalid/v1'; profile.model = 'qa-offline'; data.profile = profile;
+    if (/^http:\/\/10\.0\.2\.2:\d{1,5}\/v1$/.test(this.qaBase)) {
+      profile.base = this.qaBase; profile.model = 'qa-model'; await store.saveKey(AssistantCore.endpoint(profile.base).origin, 'qa-not-a-real-model-key');
+    }
     const conversation = AssistantCore.create('qa-menu', profile, Date.now()); conversation.title = '菜单隔离验收'; conversation.titleSource = 'manual'; conversation.titleState = 'done';
     const user = new LocalMessage(); user.id = 'qa-user'; user.text = '仅用于菜单验收。';
     const reply = new LocalMessage(); reply.id = 'qa-reply'; reply.role = 'assistant'; reply.text = '这是一条虚构回复，没有模型请求。';
@@ -77,8 +81,9 @@ struct ExportSmoke {
       Text('DSH 导出隔离验收').fontSize(24)
       Text(this.result).id('qa-result')
       Text('安全区像素：' + this.safeTop).id('qa-safe-top')
+      TextInput({ text: this.qaBase, placeholder: '可选：模拟器虚构服务' }).height(44).id('qa-model-base').onChange((value: string) => { this.qaBase = value; })
       Button('生成虚构导出').id('qa-generate').onClick(() => { void this.generate(); })
-      Button('准备菜单测试数据').id('qa-seed-menu').onClick(() => { this.seedMenus(); })
+      Button('准备菜单测试数据').id('qa-seed-menu').onClick(() => { void this.seedMenus(); })
       Button('打开主页').id('qa-home').onClick(() => { this.getUIContext().getRouter().replaceUrl({ url: 'pages/Index' }); })
     }.width('100%').height('100%').justifyContent(FlexAlign.Center).padding(24).backgroundColor('#faf9f5')
   }

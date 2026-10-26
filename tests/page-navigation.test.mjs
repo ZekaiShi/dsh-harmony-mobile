@@ -23,6 +23,11 @@ test('settings, picker and new conversations animate forward while back restores
   navigation.backward('list');assert.deepEqual(navigation.paths.names,[]);
   assert.ok(navigation.paths.calls.every(call=>call[1]===true),'Every native stack operation keeps animation enabled');
 });
+test('rename has one animated native route and returns to the same conversation',()=>{
+  const navigation=new PageNavigation('list');navigation.forward('chat',true);navigation.forward('rename');navigation.forward('rename');
+  assert.deepEqual(navigation.paths.names,['chat','rename']);navigation.backward('chat');assert.deepEqual(navigation.paths.names,['chat']);
+  assert.deepEqual(navigation.paths.calls.map(c=>c[0]),['push','push','pop']);assert.ok(navigation.paths.calls.every(c=>c[1]===true));
+});
 test('repeated ordinary taps do not pile up identical settings pages, but a fresh conversation always pushes',()=>{
   const navigation=new PageNavigation('main');navigation.forward('settings');navigation.forward('settings');assert.deepEqual(navigation.paths.names,['settings']);
   navigation.forward('chat',true);navigation.forward('chat',true);assert.deepEqual(navigation.paths.names,['settings','chat','chat']);
