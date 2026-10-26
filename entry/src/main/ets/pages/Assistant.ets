@@ -284,7 +284,7 @@ struct Assistant {
       const key = await this.store.key(AssistantCore.endpoint(profile.base).origin);
       if (epoch !== this.titleEpoch) return;
       if (!key) throw new Error('未配置密钥');
-      this.recordUsage(conversation, id, 'title', TokenUsage.estimate(request.messages[0].content, ''));
+      this.recordUsage(conversation, id, 'title', TokenUsage.estimate(request.messages.map((m) => m.content).join('\n'), ''));
       this.titleTask = this.client.start(profile, key, request, {
         usage: (value: RequestUsage): void => { if (epoch === this.titleEpoch) this.recordUsage(conversation, id, 'title', value); },
         update: (text: string): void => { if (epoch === this.titleEpoch) title = text; },
