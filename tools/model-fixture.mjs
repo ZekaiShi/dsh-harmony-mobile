@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-export async function createModelFixture() {
+export async function createModelFixture(options = {}) {
   const requests=[]; const timers=new Set(); let delay=100; let canceled=0; let trapRequests=0;
   const key='qa-not-a-real-model-key';
   const trap=createServer((req,res)=>{trapRequests++;res.end('{}');});
@@ -18,9 +18,12 @@ export async function createModelFixture() {
     let complete=false;
     const timer=setTimeout(()=>{
       timers.delete(timer);if(res.destroyed)return;
-      emit({choices:[{delta:{content:'## 独立聊天已就绪\n\n收到：'+text+'\n\n- 手机直连模型服务\n- 支持**本机历史**与 `Markdown`'}}]});
+      const title = options.accounting && body.messages?.[0]?.content?.includes('只负责给对话命名');
+      emit({choices:[{delta:{content:title ? '虚构对话验收' : '## 独立聊天已就绪\n\n收到：'+text+'\n\n- 手机直连模型服务\n- 支持**本机历史**与 `Markdown`'}}]});
       if(req.url.startsWith('/abrupt/')){complete=true;res.end();return;}
-      emit({choices:[{delta:{},finish_reason:'stop'}]});res.end('data: [DONE]\r\n\r\n');complete=true;
+      emit({choices:[{delta:{},finish_reason:'stop'}]});
+      if (options.accounting) emit({choices:[],usage:{prompt_tokens:title?28:120,completion_tokens:title?8:24,total_tokens:title?36:144}});
+      res.end('data: [DONE]\r\n\r\n');complete=true;
     },delay);timers.add(timer);
     res.on('close',()=>{if(!complete){canceled++;clearTimeout(timer);timers.delete(timer);}});
   });

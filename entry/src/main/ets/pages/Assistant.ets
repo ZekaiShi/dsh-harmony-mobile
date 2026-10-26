@@ -543,13 +543,11 @@ struct Assistant {
   }
   @Builder private chat() {
     Column({ space: 0 }) {
-      Row({ space: 10 }) {
-        Button('重命名', { type: ButtonType.Normal }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).onClick(() => { this.titleInput = this.active.title; this.rename = !this.rename; })
-        Button('复制会话', { type: ButtonType.Normal }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).id('assistant-copy-conversation').onClick(() => this.copy(AssistantCore.transcript(this.active)))
-        Button('Token', { type: ButtonType.Normal }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).id('assistant-usage').onClick(() => this.usageDetails())
-        Button(this.exporting ? '导出中…' : '导出', { type: ButtonType.Normal }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).id('assistant-export').enabled(!this.exporting && this.active.messages.length > 0).onClick(() => this.exportMenu())
-        Blank()
-        Text(this.naming ? '命名中…' : '本机会话').fontSize(10).fontColor($r('app.color.text_secondary'))
+      Row({ space: 4 }) {
+        Button('重命名', { type: ButtonType.Normal }).layoutWeight(1).padding({ left: 8, right: 8 }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).onClick(() => { this.titleInput = this.active.title; this.rename = !this.rename; })
+        Button('复制会话', { type: ButtonType.Normal }).layoutWeight(1).padding({ left: 8, right: 8 }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).id('assistant-copy-conversation').onClick(() => this.copy(AssistantCore.transcript(this.active)))
+        Button('Token', { type: ButtonType.Normal }).layoutWeight(1).padding({ left: 8, right: 8 }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).id('assistant-usage').onClick(() => this.usageDetails())
+        Button(this.exporting ? '导出中…' : '导出', { type: ButtonType.Normal }).layoutWeight(1).padding({ left: 8, right: 8 }).height(32).fontSize(11).backgroundColor(Color.Transparent).fontColor($r('app.color.text_secondary')).id('assistant-export').enabled(!this.exporting && this.active.messages.length > 0).onClick(() => this.exportMenu())
       }.padding({ left: 15, right: 23 }).width('100%')
       if (this.rename) Row({ space: 8 }) {
         TextInput({ text: this.titleInput }).layoutWeight(1).height(40).maxLength(80).id('conversation-title').onChange((text: string) => { this.titleInput = text; })
